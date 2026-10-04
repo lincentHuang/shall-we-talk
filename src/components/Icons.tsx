@@ -63,7 +63,20 @@ export const NextIcon = ({ size = 18, color = '#FFF8EA' }: P) => (
   </Svg>
 );
 
-export const CloseIcon = ({ size = 18, color = colors.plum }: P) => (
+/** 換一張：順時針箭頭 */
+export const RedrawIcon = ({ size = 18, color = colors.plum }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M20.5 4.5 V10 H15 M19.6 15 A8 8 0 1 1 18 6.8 L20.5 10"
+      stroke={color}
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+export const CloseIcon =({ size = 18, color = colors.plum }: P) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path d="M6 6 L18 18 M18 6 L6 18" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
   </Svg>

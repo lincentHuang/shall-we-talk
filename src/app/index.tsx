@@ -70,7 +70,7 @@ export default function Home() {
     const last = await loadSettings();
     router.push({
       pathname: '/play',
-      params: settingsToParams({ ...DEFAULT_SETTINGS, partner: last.partner, partnerName: last.partnerName, scene: last.scene }),
+      params: settingsToParams({ ...DEFAULT_SETTINGS, partner: last.partner, players: last.players, scene: last.scene }),
     });
   };
 
@@ -90,7 +90,7 @@ export default function Home() {
 
           <View style={styles.titleBlock}>
             <Text style={styles.eyebrow}>✦ Shall We Talk ✦</Text>
-            <Text style={styles.title}>聊聊</Text>
+            <Text style={styles.title}>聊聊好嗎</Text>
             <Divider width={200} />
             <Text style={styles.tagline}>抽一張牌，讓話題慢慢變深</Text>
           </View>

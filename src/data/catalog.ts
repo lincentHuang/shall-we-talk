@@ -194,3 +194,16 @@ export const CARD_BACK = require('../../assets/cards/back.jpg');
 
 export const LEVEL_MARK: Record<Level, string> = { 1: 'I', 2: 'II', 3: 'III' };
 export const LEVEL_NAME: Record<Level, string> = { 1: '淺談', 2: '走心', 3: '深談' };
+
+/* ---------- 牌局的分層：先暖身，再由淺入深，一層聊完才往下 ---------- */
+
+export type StageId = 0 | Level;
+
+export type Stage = { id: StageId; mark: string; name: string; intro: string };
+
+export const STAGES: Record<StageId, Stage> = {
+  0: { id: 0, mark: '✧', name: '暖身破冰', intro: '從輕鬆的小事開始，先讓心情放鬆下來。' },
+  1: { id: 1, mark: LEVEL_MARK[1], name: LEVEL_NAME[1], intro: '聊聊日常和喜好，從熟悉的地方開始。' },
+  2: { id: 2, mark: LEVEL_MARK[2], name: LEVEL_NAME[2], intro: '說說經歷和感受，往心裡再走一點。' },
+  3: { id: 3, mark: LEVEL_MARK[3], name: LEVEL_NAME[3], intro: '那些比較少說出口的事。慢慢來，不勉強。' },
+};

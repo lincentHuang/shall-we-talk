@@ -8,10 +8,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Backdrop, Sparkle } from '../components/Backdrop';
 import { IconButton, PrimaryButton } from '../components/Buttons';
-import { BackIcon } from '../components/Icons';
+import { BackIcon, CloseIcon } from '../components/Icons';
 import { SectionTitle } from '../components/Ornament';
-import { LEVEL_MARK, PARTNERS, SCENES, TOPICS, TOPIC_IDS, type TopicId } from '../data/catalog';
-import { buildDeck, DEFAULT_SETTINGS, settingsToParams, type Settings } from '../lib/deck';
+import { LEVEL_MARK, PARTNERS, SCENES, STAGES, TOPICS, TOPIC_IDS, type TopicId } from '../data/catalog';
+import {
+  buildDeck,
+  cleanName,
+  DEFAULT_SETTINGS,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  NAME_MAX,
+  normalizePlayers,
+  settingsToParams,
+  stageSpans,
+  type Settings,
+} from '../lib/deck';
 import { haptic } from '../lib/feedback';
 import { loadSettings, saveSettings } from '../lib/storage';
 import { colors, fonts, shadow } from '../theme';
@@ -77,8 +88,18 @@ export default function Setup() {
       return { ...prev, topics, random: topics.length === 0 };
     });
 
+  const setPlayer = (i: number, name: string) =>
+    setS((prev) => ({ ...prev, players: prev.players.map((n, k) => (k === i ? cleanName(name) : n)) }));
+  const addPlayer = () => {
+    haptic.tick();
+    setS((prev) => ({ ...prev, players: normalizePlayers([...prev.players, '']) }));
+  };
+  const removePlayer = (i: number) =>
+    setS((prev) => ({ ...prev, players: normalizePlayers(prev.players.filter((_, k) => k !== i)) }));
+
   const scene = SCENES.find((x) => x.id === s.scene) ?? SCENES[0];
-  const deckSize = useMemo(() => buildDeck(s).length, [s]);
+  const deck = useMemo(() => buildDeck(s), [s]);
+  const layerCount = useMemo(() => stageSpans(deck).length, [deck]);
   const isSelf = s.partner === 'self';
 
   const start = () => {
@@ -131,17 +152,36 @@ export default function Setup() {
               })}
             </View>
             {!isSelf && (
-              <View style={styles.nameRow}>
-                <Text style={styles.nameLabel}>對方的名字</Text>
-                <TextInput
-                  value={s.partnerName}
-                  onChangeText={(t) => update({ partnerName: t.slice(0, 12) })}
-                  placeholder="選填，會顯示在牌桌上"
-                  placeholderTextColor="#A69CB8"
-                  style={styles.nameInput}
-                  maxLength={12}
-                  returnKeyType="done"
-                />
+              <View style={styles.players}>
+                <View style={styles.playersHead}>
+                  <Text style={styles.nameLabel}>一起玩的人</Text>
+                  <Text style={styles.playersMeta}>{s.players.length} 人・照順序輪流抽牌回答</Text>
+                </View>
+                {s.players.map((name, i) => (
+                  <View key={i} style={styles.nameRow}>
+                    <Text style={styles.nameIndex}>{i + 1}</Text>
+                    <TextInput
+                      value={name}
+                      onChangeText={(t) => setPlayer(i, t)}
+                      placeholder={namePlaceholder(i, s.players.length)}
+                      placeholderTextColor="#A69CB8"
+                      style={styles.nameInput}
+                      maxLength={NAME_MAX}
+                      returnKeyType="done"
+                      accessibilityLabel={`第 ${i + 1} 位的名字`}
+                    />
+                    {s.players.length > MIN_PLAYERS && (
+                      <IconButton label={`移除第 ${i + 1} 位`} onPress={() => removePlayer(i)} style={styles.removeBtn}>
+                        <CloseIcon size={13} color={colors.inkSoft} />
+                      </IconButton>
+                    )}
+                  </View>
+                ))}
+                {s.players.length < MAX_PLAYERS && (
+                  <Pressable accessibilityRole="button" onPress={addPlayer} style={styles.addPlayer}>
+                    <Text style={styles.addPlayerText}>＋ 再加一位（最多 {MAX_PLAYERS} 人）</Text>
+                  </Pressable>
+                )}
               </View>
             )}
 
@@ -157,7 +197,7 @@ export default function Setup() {
                     label={sc.name}
                     selected={on}
                     onPress={() => update({ scene: sc.id })}
-                    style={{ width: tileW, height: tileW * 1.22 }}
+                    style={{ width: tileW, height: tileW * 0.78 + SCENE_TEXT_H }}
                   >
                     <View style={[styles.sceneTile, on ? styles.tileOn : styles.tileOff]}>
                       <Image source={sc.image} style={{ width: '100%', height: tileW * 0.78 }} contentFit="cover" />
@@ -167,7 +207,7 @@ export default function Setup() {
                           {sc.mood}
                         </Text>
                         <Text style={styles.sceneMeta}>
-                          {sc.levels.map((l) => LEVEL_MARK[l]).join(' · ')}　約 {sc.count} 張
+                          {[STAGES[0].mark, ...sc.levels.map((l) => LEVEL_MARK[l])].join(' · ')}　約 {sc.count} 張
                         </Text>
                       </View>
                       {on && <SelectedBadge />}
@@ -218,7 +258,7 @@ export default function Setup() {
                       <Image source={t.thumb} style={{ width: '100%', height: tileW * 0.62 }} contentFit="cover" />
                       <View style={[styles.topicText, { borderTopColor: t.accent }]}>
                         <Text style={[styles.topicName, { color: t.ink }]}>{t.name}</Text>
-                        <Text numberOfLines={1} style={styles.topicDesc}>
+                        <Text numberOfLines={2} style={styles.topicDesc}>
                           {t.desc}
                         </Text>
                       </View>
@@ -261,9 +301,9 @@ export default function Setup() {
           <SafeAreaView edges={['bottom']} style={{ width: colW, paddingHorizontal: 20 }}>
             <PrimaryButton
               label="洗牌開始"
-              sub={`${scene.name} · ${deckSize} 張`}
+              sub={`${scene.name} · ${layerCount} 層 · ${deck.length} 張`}
               onPress={start}
-              disabled={deckSize === 0}
+              disabled={deck.length === 0}
             />
           </SafeAreaView>
         </View>
@@ -271,6 +311,15 @@ export default function Setup() {
     </View>
   );
 }
+
+function namePlaceholder(i: number, total: number) {
+  if (i === 0) return '你的名字（選填）';
+  if (total === 2) return '對方的名字（選填）';
+  return `第 ${i + 1} 位的名字（選填）`;
+}
+
+/** 情境卡文字區固定高度：三行字（行高 22 + 16 + 18 + 間距 3）+ 上下內距 14 + 選取框 4，留一點餘裕 */
+const SCENE_TEXT_H = 80;
 
 const tileBase = {
   flex: 1,
@@ -314,16 +363,23 @@ const styles = StyleSheet.create({
   chipGlyph: { fontFamily: fonts.displayRegular, fontSize: 15, color: colors.gold },
   chipLabel: { fontFamily: fonts.serifBold, fontSize: 14.5, color: colors.plum, letterSpacing: 1 },
   chipHint: { fontFamily: fonts.serif, fontSize: 10, color: colors.inkSoft, marginTop: 2 },
+  players: { marginTop: 18 },
+  playersHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 },
+  playersMeta: { fontFamily: fonts.serif, color: colors.inkSoft, fontSize: 11.5, letterSpacing: 0.5 },
   nameRow: {
-    marginTop: 14,
+    marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(201,162,90,0.6)',
-    paddingBottom: 4,
+    minHeight: 44,
   },
-  nameLabel: { fontFamily: fonts.serif, color: colors.plum, fontSize: 14, letterSpacing: 2 },
+  nameLabel: { fontFamily: fonts.serifBold, color: colors.plum, fontSize: 14, letterSpacing: 2 },
+  nameIndex: { fontFamily: fonts.display, color: colors.goldDeep, fontSize: 17, width: 16, textAlign: 'center' },
+  removeBtn: { width: 28, height: 28, borderRadius: 14 },
+  addPlayer: { alignSelf: 'flex-start', paddingVertical: 12, paddingRight: 12 },
+  addPlayerText: { fontFamily: fonts.serif, color: colors.goldDeep, fontSize: 13.5, letterSpacing: 1 },
   nameInput: {
     flex: 1,
     fontFamily: fonts.serif,
@@ -336,10 +392,10 @@ const styles = StyleSheet.create({
   tileOff: { borderWidth: 1, borderColor: 'rgba(201,162,90,0.45)' },
   tileOn: { borderWidth: 2, borderColor: colors.gold, ...shadow(8, 0.28) },
   sceneTile: tileBase,
-  sceneText: { flex: 1, paddingHorizontal: 10, paddingVertical: 7, justifyContent: 'center' },
-  sceneName: { fontFamily: fonts.serifBold, fontSize: 15, color: colors.plum, letterSpacing: 1 },
-  sceneMood: { fontFamily: fonts.serif, fontSize: 11, color: colors.inkSoft, marginTop: 1 },
-  sceneMeta: { fontFamily: fonts.display, fontSize: 12.5, color: colors.goldDeep, marginTop: 2 },
+  sceneText: { flex: 1, paddingHorizontal: 8, paddingVertical: 7, justifyContent: 'center' },
+  sceneName: { fontFamily: fonts.serifBold, fontSize: 15, lineHeight: 22, color: colors.plum, letterSpacing: 1 },
+  sceneMood: { fontFamily: fonts.serif, fontSize: 11, lineHeight: 16, color: colors.inkSoft, marginTop: 1 },
+  sceneMeta: { fontFamily: fonts.display, fontSize: 12.5, lineHeight: 18, color: colors.goldDeep, marginTop: 2 },
   badge: {
     position: 'absolute',
     top: 8,
@@ -357,9 +413,10 @@ const styles = StyleSheet.create({
   randomSub: { fontFamily: fonts.serif, fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
   randomEn: { fontFamily: fonts.display, fontSize: 20, color: colors.goldDeep },
   topicTile: tileBase,
-  topicText: { flex: 1, paddingHorizontal: 10, justifyContent: 'center', borderTopWidth: 2 },
-  topicName: { fontFamily: fonts.serifBold, fontSize: 14.5, letterSpacing: 1 },
-  topicDesc: { fontFamily: fonts.serif, fontSize: 10.5, color: colors.inkSoft, marginTop: 2 },
+  topicText: { flex: 1, paddingHorizontal: 8, justifyContent: 'center', borderTopWidth: 2 },
+  // 文字區高 64（扣選取框剩 60）：標題 21 + 間距 2 + 描述最多兩行 30
+  topicName: { fontFamily: fonts.serifBold, fontSize: 14.5, lineHeight: 21, letterSpacing: 1 },
+  topicDesc: { fontFamily: fonts.serif, fontSize: 10, lineHeight: 15, color: colors.inkSoft, marginTop: 2 },
   wildRow: {
     marginTop: 18,
     flexDirection: 'row',

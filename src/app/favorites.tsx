@@ -10,7 +10,7 @@ import { CardFace } from '../components/Card';
 import { CloseIcon, HeartIcon } from '../components/Icons';
 import { Divider } from '../components/Ornament';
 import { TOPICS } from '../data/catalog';
-import { QUESTION_BY_ID, type Question } from '../data/questions';
+import { phrase, QUESTION_BY_ID, type Question } from '../data/questions';
 import { haptic } from '../lib/feedback';
 import { toggleFavorite, useFavorites } from '../lib/storage';
 import { colors, fonts, shadow } from '../theme';
@@ -67,7 +67,7 @@ export default function Favorites() {
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowTopic, { color: t.ink }]}>✦ {t.name}</Text>
-                      <Text style={styles.rowText}>{item.text}</Text>
+                      <Text style={styles.rowText}>{phrase(item.text)}</Text>
                     </View>
                     <IconButton label="取消收藏" onPress={() => toggleFavorite(item.id)} style={styles.rowHeart}>
                       <HeartIcon filled size={18} color="#B5536F" />
@@ -84,7 +84,7 @@ export default function Favorites() {
         <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(160)} style={styles.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(null)} accessibilityLabel="關閉" />
           <Animated.View entering={ZoomIn.springify().damping(15)} style={shadow(18, 0.35)}>
-            <CardFace kind={open.kind} level={open.level} text={open.text} width={bigW} />
+            <CardFace kind={open.kind} level={open.level} text={phrase(open.text)} width={bigW} />
           </Animated.View>
           <Text style={styles.overlayHint}>點任意處關閉</Text>
         </Animated.View>

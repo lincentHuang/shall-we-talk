@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { CARD_BACK, LEVEL_MARK, LEVEL_NAME, TOPICS, type CardKind, type Level } from '../data/catalog';
+import { CARD_BACK, STAGES, TOPICS, type CardKind, type StageId } from '../data/catalog';
 import { CARD_RATIO, fonts } from '../theme';
 
 export const cardHeight = (w: number) => Math.round(w * CARD_RATIO);
@@ -23,7 +23,7 @@ function questionSize(w: number, len: number) {
 type FaceProps = {
   kind: CardKind;
   text: string;
-  level?: Level;
+  level?: StageId;
   width: number;
   /** 收尾卡等特殊標題／頁尾 */
   label?: string;
@@ -36,7 +36,7 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
   const h = cardHeight(width);
   const fs = questionSize(width, text.length);
   const footer =
-    footerText ?? (kind === 'wild' ? 'Wild Card' : level ? `${LEVEL_MARK[level]} · ${LEVEL_NAME[level]}` : topic.en);
+    footerText ?? (kind === 'wild' ? 'Wild Card' : level != null ? `${STAGES[level].mark} · ${STAGES[level].name}` : topic.en);
 
   return (
     <View style={[{ width, height: h, borderRadius: cardRadius(width), overflow: 'hidden' }, style]}>
