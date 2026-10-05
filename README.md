@@ -65,3 +65,5 @@ npm run fonts
 ## 美術
 
 卡牌美術以使用者提供的參考圖風格（新藝術運動、慕夏風、薰衣草紫與土耳其藍、金色秋葉）透過 AI 生成；音效同樣為 AI 生成。原始檔放在 `art-source/`。
+
+App 圖示是「拱窗對話框」：卡背的拱窗加上對話框尾巴，窗裡升起金色太陽。向量原始檔在 `art-source/logo/`（iOS 圖示、Android 自適應圖示的前景／背景／單色版、啟動圖示、favicon），輸出的 PNG 在 `assets/`；其他四款提案留在 `art-source/logo-concepts/`。
