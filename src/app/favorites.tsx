@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,11 +9,12 @@ import { IconButton, PrimaryButton } from '../components/Buttons';
 import { CardFace } from '../components/Card';
 import { CloseIcon, HeartIcon } from '../components/Icons';
 import { Divider } from '../components/Ornament';
+import { Text } from '../components/Text';
 import { TOPICS } from '../data/catalog';
 import { phrase, QUESTION_BY_ID, type Question } from '../data/questions';
 import { haptic } from '../lib/feedback';
 import { toggleFavorite, useFavorites } from '../lib/storage';
-import { colors, fonts, shadow } from '../theme';
+import { colors, fonts, radius, shadow, type } from '../theme';
 
 export default function Favorites() {
   const { width, height } = useWindowDimensions();
@@ -70,7 +71,7 @@ export default function Favorites() {
                       <Text style={styles.rowText}>{phrase(item.text)}</Text>
                     </View>
                     <IconButton label="取消收藏" onPress={() => toggleFavorite(item.id)} style={styles.rowHeart}>
-                      <HeartIcon filled size={18} color="#B5536F" />
+                      <HeartIcon filled size={18} color={colors.heart} />
                     </IconButton>
                   </Pressable>
                 </Animated.View>
@@ -101,26 +102,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
-  title: { fontFamily: fonts.serifBold, fontSize: 17, color: colors.plum, letterSpacing: 6 },
-  count: { fontFamily: fonts.serif, fontSize: 13, color: colors.inkSoft, letterSpacing: 2, marginBottom: 2 },
+  title: { ...type.heading, color: colors.plum, letterSpacing: 6 },
+  count: { ...type.callout, color: colors.inkSoft, letterSpacing: 2, marginBottom: 2 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 30, paddingBottom: 60 },
-  emptyTitle: { fontFamily: fonts.serifBold, fontSize: 18, color: colors.plum, letterSpacing: 3, marginTop: 8 },
-  emptySub: { fontFamily: fonts.serif, fontSize: 13, color: colors.inkSoft, textAlign: 'center', letterSpacing: 1 },
+  emptyTitle: { ...type.heading, color: colors.plum, letterSpacing: 3, marginTop: 8, textAlign: 'center' },
+  emptySub: { ...type.callout, color: colors.inkSoft, textAlign: 'center', letterSpacing: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: 'rgba(251,241,223,0.94)',
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(201,162,90,0.45)',
+    borderColor: colors.line,
     borderLeftWidth: 4,
     paddingVertical: 12,
     paddingLeft: 14,
     paddingRight: 8,
   },
-  rowTopic: { fontFamily: fonts.serifBold, fontSize: 11.5, letterSpacing: 2, marginBottom: 4 },
-  rowText: { fontFamily: fonts.serif, fontSize: 15, lineHeight: 23, color: colors.ink },
+  rowTopic: { ...type.footnote, fontFamily: fonts.serifBold, letterSpacing: 2, marginBottom: 4 },
+  rowText: { ...type.body, color: colors.ink },
   rowHeart: { width: 36, height: 36, borderRadius: 18, borderColor: 'rgba(217,154,171,0.6)' },
   overlay: {
     position: 'absolute',
@@ -133,5 +134,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 50,
   },
-  overlayHint: { fontFamily: fonts.serif, color: '#F1E8FA', fontSize: 12, marginTop: 18, letterSpacing: 2 },
+  overlayHint: { ...type.caption, color: '#F1E8FA', marginTop: 18, letterSpacing: 2 },
 });

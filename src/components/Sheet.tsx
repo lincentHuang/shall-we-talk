@@ -1,12 +1,16 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, fonts, shadow } from '../theme';
+import { colors, radius, shadow, type } from '../theme';
 import { Divider } from './Ornament';
+import { Text } from './Text';
 
 /** 簡單的底部彈出面板（網頁與手機通用，不依賴原生 Modal） */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   return (
     <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]}>
       <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={StyleSheet.absoluteFill}>
@@ -17,10 +21,24 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         exiting={SlideOutDown.duration(220)}
         style={styles.panelWrap}
       >
-        <View style={[styles.panel, shadow(18, 0.3)]}>
+        {/* 面板不超過螢幕、內容太長就捲動；底部讓出手勢列／導覽列 */}
+        <View
+          style={[
+            styles.panel,
+            shadow(18, 0.3),
+            { maxHeight: height - insets.top - 24, paddingBottom: 24 + insets.bottom },
+          ]}
+        >
           <Text style={styles.title}>{title}</Text>
           <Divider width={150} />
-          <View style={{ marginTop: 14, alignSelf: 'stretch' }}>{children}</View>
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={{ paddingTop: 14 }}
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {children}
+          </ScrollView>
         </View>
       </Animated.View>
     </View>
@@ -34,15 +52,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 520,
     backgroundColor: colors.parchment,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     borderWidth: 1.5,
     borderBottomWidth: 0,
     borderColor: colors.gold,
     paddingHorizontal: 24,
     paddingTop: 22,
-    paddingBottom: 36,
     alignItems: 'center',
   },
-  title: { fontFamily: fonts.serifBold, fontSize: 19, color: colors.plum, letterSpacing: 5, marginBottom: 4 },
+  title: { ...type.title, color: colors.plum, letterSpacing: 5, marginBottom: 4, textAlign: 'center' },
+  body: { alignSelf: 'stretch', flexGrow: 0 },
 });

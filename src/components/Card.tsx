@@ -1,15 +1,21 @@
 import { Image } from 'expo-image';
 import { memo } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { CARD_BACK, STAGES, TOPICS, type CardKind, type StageId } from '../data/catalog';
 import { CARD_RATIO, fonts } from '../theme';
+import { Text } from './Text';
 
 export const cardHeight = (w: number) => Math.round(w * CARD_RATIO);
 export const cardRadius = (w: number) => Math.round(w * 0.045);
 
 /** 卡圖包一層不接收指標事件的 View：避免桌機瀏覽器原生的「拖曳圖片」吃掉手勢、手機長按跳出存圖選單 */
 const artLayer = [StyleSheet.absoluteFill, { pointerEvents: 'none' as const }];
+
+/*
+ * 卡面字級跟著卡片寬度走、要剛好落在美術的留白裡，所以不跟系統字體放大（allowFontScaling=false）。
+ * 每段字都指定 lineHeight，避免 Android 上思源宋體的預設行距把題目擠出留白區。
+ */
 
 /* 卡面美術裡「留白羊皮紙」的位置（相對卡片寬高） */
 const PANEL = { top: 0.583, bottom: 0.1, side: 0.135 };
@@ -55,9 +61,12 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
         }}
       >
         <Text
+          allowFontScaling={false}
+          numberOfLines={1}
           style={{
             fontFamily: fonts.serifBold,
             fontSize: width * 0.038,
+            lineHeight: width * 0.038 * 1.5,
             color: topic.ink,
             letterSpacing: width * 0.012,
             opacity: 0.85,
@@ -66,6 +75,7 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
           ✦ {label ?? topic.name} ✦
         </Text>
         <Text
+          allowFontScaling={false}
           style={{
             fontFamily: fonts.serif,
             fontSize: fs,
@@ -78,9 +88,12 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
           {text}
         </Text>
         <Text
+          allowFontScaling={false}
+          numberOfLines={1}
           style={{
             fontFamily: fonts.display,
             fontSize: width * 0.042,
+            lineHeight: width * 0.042 * 1.3,
             color: topic.ink,
             opacity: 0.7,
             letterSpacing: 1.5,

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -19,10 +19,11 @@ import { GhostButton, IconButton, PrimaryButton } from '../components/Buttons';
 import { CardBack, CardFace, cardHeight } from '../components/Card';
 import { HeartIcon, SoundIcon } from '../components/Icons';
 import { Divider } from '../components/Ornament';
+import { Text } from '../components/Text';
 import { DEFAULT_SETTINGS, settingsToParams } from '../lib/deck';
 import { haptic, playSound, setMuted, useMuted } from '../lib/feedback';
 import { loadSettings, useFavorites } from '../lib/storage';
-import { colors, fonts, shadow } from '../theme';
+import { colors, shadow, type } from '../theme';
 
 function FanCard({
   spread,
@@ -90,7 +91,9 @@ export default function Home() {
 
           <View style={styles.titleBlock}>
             <Text style={styles.eyebrow}>✦ Shall We Talk ✦</Text>
-            <Text style={styles.title}>聊聊好嗎</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={styles.title}>
+              聊聊好嗎
+            </Text>
             <Divider width={200} />
             <Text style={styles.tagline}>抽一張牌，讓話題慢慢變深</Text>
           </View>
@@ -119,7 +122,9 @@ export default function Home() {
             </View>
           </View>
 
-          <Text style={styles.footer}>給每一個想好好聊天，卻不知道從何開口的人</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={styles.footer}>
+            給每一個想好好聊天，卻不知道從何開口的人
+          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -131,17 +136,16 @@ const styles = StyleSheet.create({
   col: { flex: 1, paddingHorizontal: 22, paddingBottom: 12 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 6 },
   titleBlock: { alignItems: 'center', marginTop: 4, gap: 4 },
-  eyebrow: { fontFamily: fonts.display, color: colors.goldDeep, fontSize: 15, letterSpacing: 1 },
-  title: { fontFamily: fonts.serifBold, color: colors.plum, fontSize: 46, letterSpacing: 12, marginLeft: 12 },
-  tagline: { fontFamily: fonts.serif, color: colors.inkSoft, fontSize: 15, letterSpacing: 3, marginTop: 2 },
+  eyebrow: { ...type.script, color: colors.goldDeep, letterSpacing: 1 },
+  title: { ...type.hero, color: colors.plum, letterSpacing: 12, marginLeft: 12 },
+  tagline: { ...type.body, color: colors.inkSoft, letterSpacing: 3, marginTop: 2, textAlign: 'center' },
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 200 },
   fanCard: { position: 'absolute', ...shadow(8, 0.2), borderRadius: 10 },
   actions: { gap: 12, alignItems: 'center' },
   row: { flexDirection: 'row', gap: 12, alignSelf: 'stretch' },
   footer: {
-    fontFamily: fonts.serif,
+    ...type.footnote,
     color: colors.inkSoft,
-    fontSize: 11.5,
     textAlign: 'center',
     marginTop: 14,
     letterSpacing: 1.5,

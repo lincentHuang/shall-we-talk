@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-import { colors, fonts } from '../theme';
+import { colors, type } from '../theme';
+import { Text } from './Text';
 
 /** 金色分隔線：─── ◆ ─── */
 export function Divider({ width = 180, color = colors.gold }: { width?: number; color?: string }) {
@@ -31,7 +32,7 @@ export function SectionTitle({ mark, title, sub }: { mark: string; title: string
 
 const styles = StyleSheet.create({
   section: { alignItems: 'center', gap: 2, marginBottom: 14 },
-  mark: { fontFamily: fonts.display, fontSize: 20, color: colors.goldDeep, letterSpacing: 2 },
-  title: { fontFamily: fonts.serifBold, fontSize: 20, color: colors.plum, letterSpacing: 4 },
-  sub: { fontFamily: fonts.serif, fontSize: 12.5, color: colors.inkSoft, marginBottom: 6, letterSpacing: 1 },
+  mark: { ...type.numeral, color: colors.goldDeep, letterSpacing: 2 },
+  title: { ...type.title, color: colors.plum, letterSpacing: 4 },
+  sub: { ...type.callout, color: colors.inkSoft, marginBottom: 6, letterSpacing: 1, textAlign: 'center' },
 });

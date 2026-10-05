@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo } from 'react';
-import { Platform, StyleSheet, Text } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -13,8 +13,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { colors, fonts, shadow } from '../theme';
+import { colors, shadow, type } from '../theme';
 import { CardBack, cardHeight, cardRadius } from './Card';
+import { Text } from './Text';
 
 /** 牌桌的手勢模式（在 UI 執行緒讀取）：0 鎖定、1 手牌攤開可挑牌、2 已翻開一張（手牌收在下方） */
 export const LOCKED = 0;
@@ -366,5 +367,5 @@ const styles = StyleSheet.create({
     pointerEvents: 'none',
     ...shadow(3, 0.2),
   },
-  badgeText: { fontFamily: fonts.display, fontSize: 16, color: colors.plum, marginTop: -2 },
+  badgeText: { ...type.script, color: colors.plum, marginTop: -2 },
 });

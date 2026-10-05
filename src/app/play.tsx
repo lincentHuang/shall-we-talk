@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -35,6 +35,7 @@ import { BackIcon, HeartIcon, InfoIcon, NextIcon, RedrawIcon, ShuffleIcon, Sound
 import { Divider } from '../components/Ornament';
 import { Sheet } from '../components/Sheet';
 import { ShuffleLayer } from '../components/ShuffleLayer';
+import { Text } from '../components/Text';
 import { SCENES, STAGES } from '../data/catalog';
 import { CLOSING, crowdOf, FOLLOW_UPS, followUpTip, OPENING } from '../data/guide';
 import {
@@ -49,7 +50,7 @@ import {
 import { haptic, playSound, setMuted, useMuted, warmUpSounds } from '../lib/feedback';
 import { noise } from '../lib/noise';
 import { toggleFavorite, useFavorites } from '../lib/storage';
-import { CARD_RATIO, colors, fonts, shadow } from '../theme';
+import { CARD_RATIO, colors, fonts, MAX_FONT_SCALE, radius, shadow, type, useTextHeight } from '../theme';
 
 /**
  * 一局的流程：opening 開場白 → shuffling 洗牌 → ready 挑牌 → drawing 抽出 → revealed 回答
@@ -126,6 +127,7 @@ export default function Play() {
 
   const { width: winW, height: winH } = useWindowDimensions();
   const colW = Math.min(winW, 560);
+  const textH = useTextHeight();
 
   const [deck, setDeck] = useState(() => buildDeck(settings));
   const [pos, setPos] = useState(0);
@@ -667,7 +669,9 @@ export default function Play() {
             onPress={() => setSheet('stages')}
             style={{ alignItems: 'center', flex: 1 }}
           >
-            <Text style={styles.headerTitle}>{scene.name}</Text>
+            <Text numberOfLines={1} style={styles.headerTitle}>
+              {scene.name}
+            </Text>
             <View style={styles.progressRow}>
               <View style={styles.dots}>
                 {spans.map((sp, i) => (
@@ -696,9 +700,16 @@ export default function Play() {
         </View>
 
         {/* 輪到誰＋一行提示（固定高度，避免牌桌尺寸跳動） */}
-        <View style={[styles.status, { width: colW }]}>
+        <View style={[styles.status, { width: colW, height: textH(STATUS_TEXT_H, 10) }]}>
           <View style={styles.turnRow}>
-            <Animated.Text key={turnText} entering={FadeInDown.duration(260)} style={styles.turn}>
+            <Animated.Text
+              key={turnText}
+              entering={FadeInDown.duration(260)}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              maxFontSizeMultiplier={MAX_FONT_SCALE}
+              style={styles.turn}
+            >
               {turnText}
             </Animated.Text>
             {canPass && (
@@ -711,10 +722,14 @@ export default function Play() {
             <Animated.View key={hint.text} entering={FadeIn.duration(320)}>
               {hint.onPress ? (
                 <Pressable accessibilityRole="button" accessibilityHint="打開接話小抄" hitSlop={6} onPress={hint.onPress}>
-                  <Text style={[styles.hint, styles.hintLink]}>{hint.text}　›</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.hint, styles.hintLink]}>
+                    {hint.text}　›
+                  </Text>
                 </Pressable>
               ) : (
-                <Text style={styles.hint}>{hint.text}</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit style={styles.hint}>
+                  {hint.text}
+                </Text>
               )}
             </Animated.View>
           ) : null}
@@ -878,7 +893,7 @@ export default function Play() {
                 }}
                 style={[styles.roundBig, isFav && { backgroundColor: '#F6DCE3', borderColor: colors.rose }]}
               >
-                <HeartIcon filled={isFav} color={isFav ? '#B5536F' : colors.plum} size={22} />
+                <HeartIcon filled={isFav} color={isFav ? colors.heart : colors.plum} size={22} />
               </IconButton>
               <GhostButton
                 label="換一張"
@@ -1013,7 +1028,7 @@ export default function Play() {
       {sheet === 'tips' && (
         <Sheet title="接話小抄" onClose={() => setSheet(null)}>
           <Text style={styles.tipsLead}>這不只是輪流回答。聽完之後，可以這樣接：</Text>
-          <ScrollView style={{ maxHeight: winH * 0.5 }} contentContainerStyle={{ gap: 14 }}>
+          <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.5 }} contentContainerStyle={{ gap: 14 }}>
             {FOLLOW_UPS.map((g) => (
               <View key={g.title}>
                 <Text style={styles.tipTitle}>
@@ -1041,7 +1056,7 @@ export default function Play() {
             {skippedCount ? `・換掉 ${skippedCount} 張` : ''}
           </Text>
           {answered.length ? (
-            <ScrollView style={{ maxHeight: winH * 0.46 }} contentContainerStyle={{ gap: 8 }}>
+            <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.46 }} contentContainerStyle={{ gap: 8 }}>
               {answered.map(({ card: c }) => {
                 const fav = favorites.includes(c.id);
                 return (
@@ -1053,7 +1068,7 @@ export default function Play() {
                       onPress={() => toggleFavorite(c.id)}
                       style={styles.recapHeart}
                     >
-                      <HeartIcon filled={fav} color={fav ? '#B5536F' : colors.plum} size={16} />
+                      <HeartIcon filled={fav} color={fav ? colors.heart : colors.plum} size={16} />
                     </IconButton>
                   </View>
                 );
@@ -1082,6 +1097,9 @@ export default function Play() {
   );
 }
 
+/** 狀態列字高：輪到誰（單行）＋提示（單行），內距另加間距 3、「請別人答」小框與餘裕 */
+const STATUS_TEXT_H = type.subtitle.lineHeight + type.caption.lineHeight;
+
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
@@ -1091,7 +1109,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     gap: 8,
   },
-  headerTitle: { fontFamily: fonts.serifBold, fontSize: 17, color: colors.plum, letterSpacing: 5 },
+  headerTitle: { ...type.heading, color: colors.plum, letterSpacing: 5 },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
   dots: { flexDirection: 'row', gap: 5 },
   dot: {
@@ -1103,26 +1121,27 @@ const styles = StyleSheet.create({
   },
   dotDone: { backgroundColor: 'rgba(201,162,90,0.45)' },
   dotNow: { backgroundColor: colors.gold, width: 8, height: 8 },
-  headerSub: { fontFamily: fonts.serif, fontSize: 12, color: colors.inkSoft, letterSpacing: 1 },
-  headerCount: { fontFamily: fonts.display, fontSize: 14, color: colors.goldDeep },
-  status: { height: 50, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 3 },
-  turnRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerSub: { ...type.caption, color: colors.inkSoft, letterSpacing: 1 },
+  headerCount: { ...type.script, color: colors.goldDeep },
+  // 高度在畫面裡依字體倍率計算（固定高度，避免牌桌尺寸跳動）
+  status: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 3 },
+  turnRow: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: '100%' },
   turn: {
-    fontFamily: fonts.serifBold,
-    fontSize: 14,
+    ...type.subtitle,
     color: 'rgba(78,63,107,0.9)',
     letterSpacing: 2,
+    flexShrink: 1,
   },
   passChip: {
     borderWidth: 1,
     borderColor: colors.gold,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
-    paddingVertical: 2,
+    paddingVertical: 1,
     backgroundColor: 'rgba(251,241,223,0.85)',
   },
-  passText: { fontFamily: fonts.serif, fontSize: 11.5, color: colors.goldDeep, letterSpacing: 1 },
-  hint: { fontFamily: fonts.serif, fontSize: 12, color: colors.inkSoft, letterSpacing: 1, textAlign: 'center' },
+  passText: { ...type.footnote, color: colors.goldDeep, letterSpacing: 1 },
+  hint: { ...type.caption, color: colors.inkSoft, letterSpacing: 1, textAlign: 'center' },
   hintLink: { color: colors.goldDeep },
   slotHint: {
     position: 'absolute',
@@ -1135,11 +1154,11 @@ const styles = StyleSheet.create({
     gap: 6,
     pointerEvents: 'box-none',
   },
-  slotMark: { fontFamily: fonts.display, fontSize: 30, color: colors.goldDeep, opacity: 0.85 },
-  slotHintText: { fontFamily: fonts.serif, fontSize: 15, color: colors.plum, letterSpacing: 4, opacity: 0.8 },
-  slotHintEn: { fontFamily: fonts.display, fontSize: 14, color: colors.goldDeep, opacity: 0.8 },
+  slotMark: { ...type.numeralL, color: colors.goldDeep, opacity: 0.85 },
+  slotHintText: { ...type.body, color: colors.plum, letterSpacing: 4, opacity: 0.8 },
+  slotHintEn: { ...type.script, color: colors.goldDeep, opacity: 0.8 },
   slotLink: { marginTop: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  slotLinkText: { fontFamily: fonts.serif, fontSize: 12, color: colors.goldDeep, letterSpacing: 1 },
+  slotLinkText: { ...type.caption, color: colors.goldDeep, letterSpacing: 1 },
   stagePanel: {
     position: 'absolute',
     backgroundColor: colors.parchment,
@@ -1150,48 +1169,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     gap: 6,
   },
-  stageEyebrow: { fontFamily: fonts.serif, fontSize: 12, color: colors.inkSoft, letterSpacing: 4 },
-  stageMark: { fontFamily: fonts.display, fontSize: 46, color: colors.goldDeep, lineHeight: 54 },
-  stageName: { fontFamily: fonts.serifBold, fontSize: 22, color: colors.plum, letterSpacing: 8, marginLeft: 8 },
+  stageEyebrow: { ...type.caption, color: colors.inkSoft, letterSpacing: 4 },
+  stageMark: { ...type.numeralXL, color: colors.goldDeep },
+  stageName: { ...type.display, color: colors.plum, letterSpacing: 8, marginLeft: 8 },
   stageIntro: {
-    fontFamily: fonts.serif,
-    fontSize: 14,
-    lineHeight: 23,
+    ...type.bodySmall,
     color: colors.ink,
     textAlign: 'center',
     letterSpacing: 0.5,
     marginTop: 4,
   },
-  stageCount: { fontFamily: fonts.serif, fontSize: 12, color: colors.goldDeep, letterSpacing: 2, marginTop: 6 },
+  stageCount: { ...type.caption, color: colors.goldDeep, letterSpacing: 2, marginTop: 6 },
   bottom: { height: 78, paddingHorizontal: 20, justifyContent: 'center' },
   bottomRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   roundBig: { width: 54, height: 54, borderRadius: 27 },
   redraw: { paddingHorizontal: 14, height: 50 },
   rule: { flexDirection: 'row', gap: 12, marginBottom: 12, alignItems: 'flex-start' },
-  ruleMark: { fontFamily: fonts.display, fontSize: 17, color: colors.goldDeep, width: 26, textAlign: 'right' },
+  ruleMark: { ...type.numeralS, color: colors.goldDeep, width: 26, textAlign: 'right' },
+  // 巢狀在 ruleText 裡的字只換字型，不設 lineHeight（巢狀行高在 Android 上會互相覆蓋）
   ruleTitle: { fontFamily: fonts.serifBold, color: colors.plum },
-  ruleText: { flex: 1, fontFamily: fonts.serif, fontSize: 14.5, lineHeight: 23, color: colors.ink, letterSpacing: 0.5 },
+  ruleText: { flex: 1, ...type.body, color: colors.ink, letterSpacing: 0.5 },
   ruleHint: {
-    fontFamily: fonts.serif,
-    fontSize: 12,
+    ...type.caption,
     color: colors.inkSoft,
     textAlign: 'center',
     marginTop: 4,
     letterSpacing: 0.5,
   },
-  openingWho: { fontFamily: fonts.serif, fontSize: 13, color: colors.goldDeep, textAlign: 'center', letterSpacing: 1 },
+  openingWho: { ...type.callout, color: colors.goldDeep, textAlign: 'center', letterSpacing: 1 },
   speech: {
     marginTop: 12,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(201,162,90,0.55)',
     backgroundColor: 'rgba(255,252,244,0.7)',
   },
-  speechText: { fontFamily: fonts.serif, fontSize: 16, lineHeight: 30, color: colors.ink, letterSpacing: 1 },
+  speechText: { ...type.bodyLarge, color: colors.ink, letterSpacing: 1 },
   textLink: { alignSelf: 'center', marginTop: 14, paddingHorizontal: 10, paddingVertical: 4 },
-  textLinkText: { fontFamily: fonts.serif, fontSize: 13, color: colors.goldDeep, letterSpacing: 2 },
+  textLinkText: { ...type.callout, color: colors.goldDeep, letterSpacing: 2 },
   stageItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1201,30 +1218,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 6,
   },
-  stageItemNow: { backgroundColor: 'rgba(201,162,90,0.16)', borderWidth: 1, borderColor: 'rgba(201,162,90,0.6)' },
-  stageItemMark: { fontFamily: fonts.display, fontSize: 20, color: colors.goldDeep, width: 30, textAlign: 'center' },
-  stageItemName: { fontFamily: fonts.serifBold, fontSize: 15, color: colors.plum, letterSpacing: 2 },
-  stageItemIntro: { fontFamily: fonts.serif, fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
-  stageItemCount: { fontFamily: fonts.serif, fontSize: 12, color: colors.goldDeep },
+  stageItemNow: { backgroundColor: 'rgba(201,162,90,0.16)', borderWidth: 1, borderColor: colors.lineStrong },
+  stageItemMark: { ...type.numeral, color: colors.goldDeep, width: 30, textAlign: 'center' },
+  stageItemName: { ...type.subtitle, color: colors.plum, letterSpacing: 2 },
+  stageItemIntro: { ...type.footnote, color: colors.inkSoft, marginTop: 2 },
+  stageItemCount: { ...type.caption, color: colors.goldDeep },
   passGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 8 },
   passBtn: { minWidth: 96 },
-  tipsLead: { fontFamily: fonts.serif, fontSize: 13, color: colors.inkSoft, textAlign: 'center', marginBottom: 14 },
-  tipTitle: { fontFamily: fonts.serifBold, fontSize: 15, color: colors.plum, letterSpacing: 2 },
-  tipSub: { fontFamily: fonts.serif, fontSize: 11.5, color: colors.inkSoft, letterSpacing: 0.5 },
+  tipsLead: { ...type.callout, color: colors.inkSoft, textAlign: 'center', marginBottom: 14 },
+  tipTitle: { ...type.subtitle, color: colors.plum, letterSpacing: 2 },
+  // 巢狀在 tipTitle 裡：只換字型字級，不設 lineHeight
+  tipSub: { fontFamily: fonts.serif, fontSize: type.footnote.fontSize, color: colors.inkSoft, letterSpacing: 0.5 },
   tipChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   tipChip: {
-    fontFamily: fonts.serif,
-    fontSize: 13,
+    ...type.callout,
     color: colors.ink,
     backgroundColor: 'rgba(255,252,244,0.85)',
     borderWidth: 1,
-    borderColor: 'rgba(201,162,90,0.45)',
-    borderRadius: 10,
+    borderColor: colors.line,
+    borderRadius: radius.sm,
     paddingHorizontal: 8,
     paddingVertical: 5,
     overflow: 'hidden',
   },
-  recapStat: { fontFamily: fonts.serif, fontSize: 13, color: colors.goldDeep, textAlign: 'center', marginBottom: 12 },
+  recapStat: { ...type.callout, color: colors.goldDeep, textAlign: 'center', marginBottom: 12 },
   recapRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1237,7 +1254,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(201,162,90,0.35)',
   },
-  recapMark: { fontFamily: fonts.display, fontSize: 15, color: colors.goldDeep, width: 24, textAlign: 'center' },
-  recapText: { flex: 1, fontFamily: fonts.serif, fontSize: 13.5, lineHeight: 21, color: colors.ink },
+  recapMark: { ...type.script, color: colors.goldDeep, width: 24, textAlign: 'center' },
+  recapText: { flex: 1, ...type.bodySmall, color: colors.ink },
   recapHeart: { width: 34, height: 34, borderRadius: 17 },
 });

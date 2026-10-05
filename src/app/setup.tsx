@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import { Backdrop, Sparkle } from '../components/Backdrop';
 import { IconButton, PrimaryButton } from '../components/Buttons';
 import { BackIcon, CloseIcon } from '../components/Icons';
 import { SectionTitle } from '../components/Ornament';
+import { Text } from '../components/Text';
 import { LEVEL_MARK, PARTNERS, SCENES, STAGES, TOPICS, TOPIC_IDS, type TopicId } from '../data/catalog';
 import {
   buildDeck,
@@ -25,7 +26,7 @@ import {
 } from '../lib/deck';
 import { haptic } from '../lib/feedback';
 import { loadSettings, saveSettings } from '../lib/storage';
-import { colors, fonts, shadow } from '../theme';
+import { colors, gradients, MAX_FONT_SCALE, radius, shadow, type, useTextHeight } from '../theme';
 
 /** 被選取時輕輕放大、出現金框 */
 function Selectable({
@@ -63,7 +64,7 @@ function Selectable({
 function SelectedBadge() {
   return (
     <View style={styles.badge}>
-      <Sparkle size={12} color="#FFF8EA" />
+      <Sparkle size={12} color={colors.onPrimary} />
     </View>
   );
 }
@@ -73,6 +74,10 @@ export default function Setup() {
   const colW = Math.min(width, 560);
   const gap = 12;
   const tileW = (colW - 40 - gap) / 2;
+  // 卡片文字區高度跟著系統字體大小放大，避免字被卡片邊框切掉
+  const textH = useTextHeight();
+  // 底部浮動按鈕的實際高度（含手勢列），讓清單最後一項不會被蓋住
+  const [footerH, setFooterH] = useState(140);
 
   const [s, setS] = useState<Settings>(DEFAULT_SETTINGS);
   useEffect(() => {
@@ -122,7 +127,7 @@ export default function Setup() {
 
         <ScrollView
           style={{ width: '100%' }}
-          contentContainerStyle={{ alignItems: 'center', paddingBottom: 140 }}
+          contentContainerStyle={{ alignItems: 'center', paddingBottom: footerH + 8 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -138,12 +143,22 @@ export default function Setup() {
                     label={p.label}
                     selected={on}
                     onPress={() => update({ partner: p.id })}
-                    style={{ width: (colW - 40 - gap * 2) / 3, height: 78 }}
+                    style={{ width: (colW - 40 - gap * 2) / 3, height: textH(CHIP_TEXT_H, 20) }}
                   >
                     <View style={[styles.chip, on && styles.chipOn]}>
                       <Text style={[styles.chipGlyph, on && { color: colors.goldLight }]}>{p.glyph}</Text>
-                      <Text style={[styles.chipLabel, on && { color: '#FFF8EA' }]}>{p.label}</Text>
-                      <Text numberOfLines={1} style={[styles.chipHint, on && { color: '#EDE2FA' }]}>
+                      <Text
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        style={[styles.chipLabel, on && { color: colors.onPrimary }]}
+                      >
+                        {p.label}
+                      </Text>
+                      <Text
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        style={[styles.chipHint, on && { color: colors.onPrimarySoft }]}
+                      >
                         {p.hint}
                       </Text>
                     </View>
@@ -165,6 +180,7 @@ export default function Setup() {
                       onChangeText={(t) => setPlayer(i, t)}
                       placeholder={namePlaceholder(i, s.players.length)}
                       placeholderTextColor="#A69CB8"
+                      maxFontSizeMultiplier={MAX_FONT_SCALE}
                       style={styles.nameInput}
                       maxLength={NAME_MAX}
                       returnKeyType="done"
@@ -197,16 +213,18 @@ export default function Setup() {
                     label={sc.name}
                     selected={on}
                     onPress={() => update({ scene: sc.id })}
-                    style={{ width: tileW, height: tileW * 0.78 + SCENE_TEXT_H }}
+                    style={{ width: tileW, height: tileW * 0.78 + textH(SCENE_TEXT_H, 21) }}
                   >
                     <View style={[styles.sceneTile, on ? styles.tileOn : styles.tileOff]}>
                       <Image source={sc.image} style={{ width: '100%', height: tileW * 0.78 }} contentFit="cover" />
                       <View style={styles.sceneText}>
-                        <Text style={styles.sceneName}>{sc.name}</Text>
+                        <Text numberOfLines={1} style={styles.sceneName}>
+                          {sc.name}
+                        </Text>
                         <Text numberOfLines={1} style={styles.sceneMood}>
                           {sc.mood}
                         </Text>
-                        <Text style={styles.sceneMeta}>
+                        <Text numberOfLines={1} style={styles.sceneMeta}>
                           {[STAGES[0].mark, ...sc.levels.map((l) => LEVEL_MARK[l])].join(' · ')}　約 {sc.count} 張
                         </Text>
                       </View>
@@ -224,18 +242,24 @@ export default function Setup() {
               label="完全隨機"
               selected={s.random}
               onPress={() => update({ random: true, topics: [] })}
-              style={{ height: 70, marginBottom: gap }}
+              style={{ height: textH(RANDOM_TEXT_H, 29), marginBottom: gap }}
             >
               <LinearGradient
-                colors={s.random ? ['#8F7BBE', '#6B5899'] : ['rgba(251,241,223,0.92)', 'rgba(243,228,200,0.92)']}
+                colors={s.random ? gradients.primary : ['rgba(251,241,223,0.92)', 'rgba(243,228,200,0.92)']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.randomTile, s.random ? styles.tileOn : styles.tileOff]}
               >
                 <Sparkle size={22} color={s.random ? colors.goldLight : colors.gold} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.randomTitle, s.random && { color: '#FFF8EA' }]}>完全隨機</Text>
-                  <Text style={[styles.randomSub, s.random && { color: '#EDE2FA' }]}>
+                  <Text numberOfLines={1} style={[styles.randomTitle, s.random && { color: colors.onPrimary }]}>
+                    完全隨機
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={[styles.randomSub, s.random && { color: colors.onPrimarySoft }]}
+                  >
                     所有主題混在一起，交給命運決定
                   </Text>
                 </View>
@@ -252,12 +276,14 @@ export default function Setup() {
                     label={t.name}
                     selected={on}
                     onPress={() => toggleTopic(id)}
-                    style={{ width: tileW, height: tileW * 0.62 + 64 }}
+                    style={{ width: tileW, height: tileW * 0.62 + textH(TOPIC_TEXT_H, 10) }}
                   >
                     <View style={[styles.topicTile, on ? styles.tileOn : styles.tileOff, { opacity: s.random ? 0.82 : 1 }]}>
                       <Image source={t.thumb} style={{ width: '100%', height: tileW * 0.62 }} contentFit="cover" />
                       <View style={[styles.topicText, { borderTopColor: t.accent }]}>
-                        <Text style={[styles.topicName, { color: t.ink }]}>{t.name}</Text>
+                        <Text numberOfLines={1} style={[styles.topicName, { color: t.ink }]}>
+                          {t.name}
+                        </Text>
                         <Text numberOfLines={2} style={styles.topicDesc}>
                           {t.desc}
                         </Text>
@@ -293,7 +319,7 @@ export default function Setup() {
         </ScrollView>
 
         {/* 底部開始按鈕 */}
-        <View style={styles.footer}>
+        <View style={styles.footer} onLayout={(e) => setFooterH(e.nativeEvent.layout.height)}>
           <LinearGradient
             colors={['rgba(251,243,230,0)', 'rgba(251,243,230,0.95)', colors.bgBottom]}
             style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
@@ -318,12 +344,22 @@ function namePlaceholder(i: number, total: number) {
   return `第 ${i + 1} 位的名字（選填）`;
 }
 
-/** 情境卡文字區固定高度：三行字（行高 22 + 16 + 18 + 間距 3）+ 上下內距 14 + 選取框 4，留一點餘裕 */
-const SCENE_TEXT_H = 80;
+/*
+ * 卡片文字區的字高（字體 1 倍時，由字級表的 lineHeight 加總），
+ * 實際高度 = 內距 + 字高 × 系統字體倍率（useTextHeight）。
+ */
+/** 對象小卡：符號＋名稱＋間距 2＋提示；內距另加上下留白與選取框 20 */
+const CHIP_TEXT_H = type.glyph.lineHeight + type.subtitle.lineHeight + 2 + type.micro.lineHeight;
+/** 情境卡：名稱＋氛圍＋層數（間距 3）；內距另加上下 14、選取框 4 與餘裕 */
+const SCENE_TEXT_H = type.subtitle.lineHeight + type.footnote.lineHeight + type.scriptS.lineHeight + 3;
+/** 完全隨機：標題＋間距 2＋說明；內距另加上下 10 與選取框 */
+const RANDOM_TEXT_H = type.subtitle.lineHeight + 2 + type.footnote.lineHeight;
+/** 主題卡：標題＋間距 2＋描述最多兩行；內距另加上框線 2、選取框 4 與餘裕 */
+const TOPIC_TEXT_H = type.subtitle.lineHeight + 2 + type.micro.lineHeight * 2;
 
 const tileBase = {
   flex: 1,
-  borderRadius: 14,
+  borderRadius: radius.md,
   overflow: 'hidden' as const,
   backgroundColor: colors.parchment,
 };
@@ -347,55 +383,56 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(201,162,90,0.5)',
   },
-  headerTitle: { fontFamily: fonts.serifBold, fontSize: 17, color: colors.plum, letterSpacing: 6 },
+  headerTitle: { ...type.heading, color: colors.plum, letterSpacing: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   chip: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: 'rgba(201,162,90,0.55)',
-    backgroundColor: 'rgba(251,241,223,0.9)',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  chipOn: { backgroundColor: '#7D69AD', borderColor: colors.goldLight, borderWidth: 1.5, ...shadow(6, 0.25) },
-  chipGlyph: { fontFamily: fonts.displayRegular, fontSize: 15, color: colors.gold },
-  chipLabel: { fontFamily: fonts.serifBold, fontSize: 14.5, color: colors.plum, letterSpacing: 1 },
-  chipHint: { fontFamily: fonts.serif, fontSize: 10, color: colors.inkSoft, marginTop: 2 },
+  chipOn: { backgroundColor: colors.primary, borderColor: colors.goldLight, borderWidth: 1.5, ...shadow(6, 0.25) },
+  chipGlyph: { ...type.glyph, color: colors.gold },
+  chipLabel: { ...type.subtitle, color: colors.plum, letterSpacing: 1 },
+  chipHint: { ...type.micro, color: colors.inkSoft, marginTop: 2 },
   players: { marginTop: 18 },
   playersHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 },
-  playersMeta: { fontFamily: fonts.serif, color: colors.inkSoft, fontSize: 11.5, letterSpacing: 0.5 },
+  playersMeta: { ...type.footnote, color: colors.inkSoft, letterSpacing: 0.5, flexShrink: 1, textAlign: 'right' },
   nameRow: {
     marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(201,162,90,0.6)',
+    borderBottomColor: colors.lineStrong,
     minHeight: 44,
   },
-  nameLabel: { fontFamily: fonts.serifBold, color: colors.plum, fontSize: 14, letterSpacing: 2 },
-  nameIndex: { fontFamily: fonts.display, color: colors.goldDeep, fontSize: 17, width: 16, textAlign: 'center' },
+  nameLabel: { ...type.subtitle, color: colors.plum, letterSpacing: 2 },
+  nameIndex: { ...type.numeralS, color: colors.goldDeep, width: 16, textAlign: 'center' },
   removeBtn: { width: 28, height: 28, borderRadius: 14 },
   addPlayer: { alignSelf: 'flex-start', paddingVertical: 12, paddingRight: 12 },
-  addPlayerText: { fontFamily: fonts.serif, color: colors.goldDeep, fontSize: 13.5, letterSpacing: 1 },
+  addPlayerText: { ...type.callout, color: colors.goldDeep, letterSpacing: 1 },
+  // 輸入框不設 lineHeight（iOS 會讓游標與文字錯位），高度交給 nameRow 的 minHeight
   nameInput: {
     flex: 1,
-    fontFamily: fonts.serif,
-    fontSize: 15,
+    fontFamily: type.body.fontFamily,
+    fontSize: type.body.fontSize,
     color: colors.ink,
     paddingVertical: 8,
     outlineStyle: 'none',
   } as object,
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  tileOff: { borderWidth: 1, borderColor: 'rgba(201,162,90,0.45)' },
+  tileOff: { borderWidth: 1, borderColor: colors.line },
   tileOn: { borderWidth: 2, borderColor: colors.gold, ...shadow(8, 0.28) },
   sceneTile: tileBase,
   sceneText: { flex: 1, paddingHorizontal: 8, paddingVertical: 7, justifyContent: 'center' },
-  sceneName: { fontFamily: fonts.serifBold, fontSize: 15, lineHeight: 22, color: colors.plum, letterSpacing: 1 },
-  sceneMood: { fontFamily: fonts.serif, fontSize: 11, lineHeight: 16, color: colors.inkSoft, marginTop: 1 },
-  sceneMeta: { fontFamily: fonts.display, fontSize: 12.5, lineHeight: 18, color: colors.goldDeep, marginTop: 2 },
+  sceneName: { ...type.subtitle, color: colors.plum, letterSpacing: 1 },
+  sceneMood: { ...type.footnote, color: colors.inkSoft, marginTop: 1 },
+  sceneMeta: { ...type.scriptS, color: colors.goldDeep, marginTop: 2 },
   badge: {
     position: 'absolute',
     top: 8,
@@ -408,29 +445,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadow(3, 0.3),
   },
-  randomTile: { flex: 1, borderRadius: 14, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 12 },
-  randomTitle: { fontFamily: fonts.serifBold, fontSize: 16, color: colors.plum, letterSpacing: 3 },
-  randomSub: { fontFamily: fonts.serif, fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
-  randomEn: { fontFamily: fonts.display, fontSize: 20, color: colors.goldDeep },
+  randomTile: {
+    flex: 1,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 12,
+  },
+  randomTitle: { ...type.subtitle, color: colors.plum, letterSpacing: 3 },
+  randomSub: { ...type.footnote, color: colors.inkSoft, marginTop: 2 },
+  randomEn: { ...type.numeral, color: colors.goldDeep },
   topicTile: tileBase,
   topicText: { flex: 1, paddingHorizontal: 8, justifyContent: 'center', borderTopWidth: 2 },
-  // 文字區高 64（扣選取框剩 60）：標題 21 + 間距 2 + 描述最多兩行 30
-  topicName: { fontFamily: fonts.serifBold, fontSize: 14.5, lineHeight: 21, letterSpacing: 1 },
-  topicDesc: { fontFamily: fonts.serif, fontSize: 10, lineHeight: 15, color: colors.inkSoft, marginTop: 2 },
+  topicName: { ...type.subtitle, letterSpacing: 1 },
+  topicDesc: { ...type.micro, color: colors.inkSoft, marginTop: 2 },
   wildRow: {
     marginTop: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 10,
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(201,162,90,0.45)',
-    backgroundColor: 'rgba(251,241,223,0.9)',
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  wildThumb: { width: 52, height: 52, borderRadius: 10 },
-  wildTitle: { fontFamily: fonts.serifBold, fontSize: 14.5, color: '#6E4E17', letterSpacing: 1 },
-  wildSub: { fontFamily: fonts.serif, fontSize: 11, color: colors.inkSoft, marginTop: 2 },
+  wildThumb: { width: 52, height: 52, borderRadius: radius.sm },
+  wildTitle: { ...type.subtitle, color: '#6E4E17', letterSpacing: 1 },
+  wildSub: { ...type.footnote, color: colors.inkSoft, marginTop: 2 },
   switch: {
     width: 44,
     height: 26,
