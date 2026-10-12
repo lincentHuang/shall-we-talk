@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, shadow, type } from '../theme';
@@ -17,8 +17,9 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         <Pressable accessibilityLabel="關閉" style={styles.scrim} onPress={onClose} />
       </Animated.View>
       <Animated.View
-        entering={SlideInDown.springify().damping(18)}
-        exiting={SlideOutDown.duration(220)}
+        // 用減速曲線而不是彈簧：直接滑到定位，不會衝過頭再彈回來
+        entering={SlideInDown.duration(280).easing(Easing.out(Easing.cubic))}
+        exiting={SlideOutDown.duration(200).easing(Easing.in(Easing.cubic))}
         style={styles.panelWrap}
       >
         {/* 面板不超過螢幕、內容太長就捲動；底部讓出手勢列／導覽列 */}

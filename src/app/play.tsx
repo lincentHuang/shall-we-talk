@@ -58,6 +58,16 @@ import { CARD_RATIO, colors, fonts, MAX_FONT_SCALE, radius, shadow, type, useTex
  */
 type Phase = 'opening' | 'shuffling' | 'ready' | 'drawing' | 'revealed' | 'discarding' | 'stage' | 'done';
 type SheetName = 'rules' | 'opening' | 'leave' | 'stages' | 'pass' | 'tips' | 'recap';
+
+const SHEET_TITLES: Record<SheetName, string> = {
+  rules: '怎麼玩',
+  opening: '開場',
+  stages: '牌局進度',
+  pass: '請誰來回答？',
+  tips: '接話小抄',
+  recap: '這一局',
+  leave: '要離開牌局嗎？',
+};
 /** 聊過的牌；skipped 表示被「換一張」換掉 */
 type LogEntry = { card: DeckCard; skipped: boolean };
 
@@ -460,6 +470,8 @@ export default function Play() {
     setSheet(null);
     setPhase((p) => (p === 'opening' ? 'shuffling' : p));
   }, []);
+
+  const closeSheet = useCallback(() => setSheet(null), []);
 
   const closeRules = useCallback(() => {
     setSheet(phase === 'opening' ? 'opening' : null);
@@ -941,156 +953,155 @@ export default function Play() {
         </View>
       </SafeAreaView>
 
-      {sheet === 'rules' && (
-        <Sheet title="怎麼玩" onClose={closeRules}>
-          {RULES.map(([m, title, text]) => (
-            <View key={m} style={styles.rule}>
-              <Text style={styles.ruleMark}>{m}</Text>
-              <Text style={styles.ruleText}>
-                <Text style={styles.ruleTitle}>{title}　</Text>
-                {text}
-              </Text>
-            </View>
-          ))}
-          <Text style={styles.ruleHint}>手勢：手指滑過扇形手牌挑一張，往上拉出（或再點一下）就抽到它；聊完的牌左右滑走。</Text>
-          <PrimaryButton label={phase === 'opening' ? '下一步：開場' : '知道了'} onPress={closeRules} style={{ marginTop: 16 }} />
-        </Sheet>
-      )}
-
-      {sheet === 'opening' && (
-        <Sheet title="開場" onClose={beginGame}>
-          <Text style={styles.openingWho}>{OPENING[crowd].who}</Text>
-          <View style={styles.speech}>
-            <Text style={styles.speechText}>{OPENING[crowd].text}</Text>
-          </View>
-          <PrimaryButton label="準備好了" sub="Shuffle the deck" onPress={beginGame} style={{ marginTop: 18 }} />
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setSheet('rules')} style={styles.textLink}>
-            <Text style={styles.textLinkText}>怎麼玩？</Text>
-          </Pressable>
-        </Sheet>
-      )}
-
-      {sheet === 'stages' && (
-        <Sheet title="牌局進度" onClose={() => setSheet(null)}>
-          {spans.map((sp, i) => {
-            const st = STAGES[sp.stage];
-            const now = !done && i === spanIdx;
-            const past = done || i < spanIdx;
-            const size = sp.end - sp.start;
-            return (
-              <View key={sp.stage} style={[styles.stageItem, now && styles.stageItemNow]}>
-                <Text style={[styles.stageItemMark, past && { opacity: 0.5 }]}>{st.mark}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.stageItemName, past && { opacity: 0.6 }]}>{st.name}</Text>
-                  <Text style={styles.stageItemIntro}>{st.intro}</Text>
-                </View>
-                <Text style={styles.stageItemCount}>
-                  {past ? '聊完了' : now ? `${drawnInStage} / ${size}` : `${size} 張`}
+      {/* 只用一個 Sheet：面板之間切換時只換內容，不會整個重新滑入 */}
+      {sheet && (
+        <Sheet title={SHEET_TITLES[sheet]} onClose={sheet === 'rules' ? closeRules : sheet === 'opening' ? beginGame : closeSheet}>
+          {sheet === 'rules' && (
+            <>
+            {RULES.map(([m, title, text]) => (
+              <View key={m} style={styles.rule}>
+                <Text style={styles.ruleMark}>{m}</Text>
+                <Text style={styles.ruleText}>
+                  <Text style={styles.ruleTitle}>{title}　</Text>
+                  {text}
                 </Text>
-              </View>
-            );
-          })}
-          {(phase === 'ready' || phase === 'stage') && (
-            <View style={{ marginTop: 10, gap: 10 }}>
-              {nextSpan && (
-                <PrimaryButton
-                  label={`直接進入${STAGES[nextSpan.stage].name}`}
-                  sub={phase === 'ready' && remaining > 0 ? `這一層剩下的 ${remaining} 張會跳過` : undefined}
-                  onPress={() => jumpTo(nextSpan.start)}
-                />
-              )}
-              <GhostButton label="今天先聊到這裡，收尾" onPress={finishEarly} />
-            </View>
-          )}
-        </Sheet>
-      )}
-
-      {sheet === 'pass' && (
-        <Sheet title="請誰來回答？" onClose={() => setSheet(null)}>
-          <View style={styles.passGrid}>
-            {players.map((name, i) =>
-              i === answerer ? null : (
-                <GhostButton
-                  key={i}
-                  label={name}
-                  onPress={() => {
-                    setProxy(i === drawer ? null : i);
-                    setSheet(null);
-                  }}
-                  style={styles.passBtn}
-                />
-              ),
-            )}
-          </View>
-        </Sheet>
-      )}
-
-      {sheet === 'tips' && (
-        <Sheet title="接話小抄" onClose={() => setSheet(null)}>
-          <Text style={styles.tipsLead}>這不只是輪流回答。聽完之後，可以這樣接：</Text>
-          <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.5 }} contentContainerStyle={{ gap: 14 }}>
-            {FOLLOW_UPS.map((g) => (
-              <View key={g.title}>
-                <Text style={styles.tipTitle}>
-                  {g.title}
-                  <Text style={styles.tipSub}>　{g.sub}</Text>
-                </Text>
-                <View style={styles.tipChips}>
-                  {g.lines.map((l) => (
-                    <Text key={l} style={styles.tipChip}>
-                      「{l}」
-                    </Text>
-                  ))}
-                </View>
               </View>
             ))}
-          </ScrollView>
-          <PrimaryButton label="知道了" onPress={() => setSheet(null)} style={{ marginTop: 16 }} />
-        </Sheet>
-      )}
-
-      {sheet === 'recap' && (
-        <Sheet title="這一局" onClose={() => setSheet(null)}>
-          <Text style={styles.recapStat}>
-            {solo ? '' : `${players.length} 個人・`}聊了 {answered.length} 張
-            {skippedCount ? `・換掉 ${skippedCount} 張` : ''}
-          </Text>
-          {answered.length ? (
-            <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.46 }} contentContainerStyle={{ gap: 8 }}>
-              {answered.map(({ card: c }) => {
-                const fav = favorites.includes(c.id);
-                return (
-                  <View key={c.id} style={styles.recapRow}>
-                    <Text style={styles.recapMark}>{c.kind === 'wild' ? '✦' : STAGES[c.stage].mark}</Text>
-                    <Text style={styles.recapText}>{c.text}</Text>
-                    <IconButton
-                      label={fav ? '取消收藏' : '收藏這題'}
-                      onPress={() => toggleFavorite(c.id)}
-                      style={styles.recapHeart}
-                    >
-                      <HeartIcon filled={fav} color={fav ? colors.heart : colors.plum} size={16} />
-                    </IconButton>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <Text style={[styles.ruleText, { textAlign: 'center' }]}>這一局還沒聊到任何一題。</Text>
+            <Text style={styles.ruleHint}>手勢：手指滑過扇形手牌挑一張，往上拉出（或再點一下）就抽到它；聊完的牌左右滑走。</Text>
+            <PrimaryButton label={phase === 'opening' ? '下一步：開場' : '知道了'} onPress={closeRules} style={{ marginTop: 16 }} />
+            </>
           )}
-          <Text style={[styles.ruleHint, { marginTop: 12 }]}>按 ♡ 把喜歡的題目收進「我的收藏」</Text>
-          <PrimaryButton label="好" onPress={() => setSheet(null)} style={{ marginTop: 14 }} />
-        </Sheet>
-      )}
-
-      {sheet === 'leave' && (
-        <Sheet title="要離開牌局嗎？" onClose={() => setSheet(null)}>
-          <Text style={[styles.ruleText, { textAlign: 'center', marginBottom: 18 }]}>
-            已經聊了 {answered.length} 張牌，離開後這一局不會保留。
-          </Text>
-          <View style={styles.bottomRow}>
-            <GhostButton label="離開" onPress={leave} style={{ flex: 1 }} />
-            <PrimaryButton label="繼續聊" onPress={() => setSheet(null)} style={{ flex: 1.4 }} />
-          </View>
+          {sheet === 'opening' && (
+            <>
+            <Text style={styles.openingWho}>{OPENING[crowd].who}</Text>
+            <View style={styles.speech}>
+              <Text style={styles.speechText}>{OPENING[crowd].text}</Text>
+            </View>
+            <PrimaryButton label="準備好了" sub="Shuffle the deck" onPress={beginGame} style={{ marginTop: 18 }} />
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setSheet('rules')} style={styles.textLink}>
+              <Text style={styles.textLinkText}>怎麼玩？</Text>
+            </Pressable>
+            </>
+          )}
+          {sheet === 'stages' && (
+            <>
+            {spans.map((sp, i) => {
+              const st = STAGES[sp.stage];
+              const now = !done && i === spanIdx;
+              const past = done || i < spanIdx;
+              const size = sp.end - sp.start;
+              return (
+                <View key={sp.stage} style={[styles.stageItem, now && styles.stageItemNow]}>
+                  <Text style={[styles.stageItemMark, past && { opacity: 0.5 }]}>{st.mark}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.stageItemName, past && { opacity: 0.6 }]}>{st.name}</Text>
+                    <Text style={styles.stageItemIntro}>{st.intro}</Text>
+                  </View>
+                  <Text style={styles.stageItemCount}>
+                    {past ? '聊完了' : now ? `${drawnInStage} / ${size}` : `${size} 張`}
+                  </Text>
+                </View>
+              );
+            })}
+            {(phase === 'ready' || phase === 'stage') && (
+              <View style={{ marginTop: 10, gap: 10 }}>
+                {nextSpan && (
+                  <PrimaryButton
+                    label={`直接進入${STAGES[nextSpan.stage].name}`}
+                    sub={phase === 'ready' && remaining > 0 ? `這一層剩下的 ${remaining} 張會跳過` : undefined}
+                    onPress={() => jumpTo(nextSpan.start)}
+                  />
+                )}
+                <GhostButton label="今天先聊到這裡，收尾" onPress={finishEarly} />
+              </View>
+            )}
+            </>
+          )}
+          {sheet === 'pass' && (
+            <>
+            <View style={styles.passGrid}>
+              {players.map((name, i) =>
+                i === answerer ? null : (
+                  <GhostButton
+                    key={i}
+                    label={name}
+                    onPress={() => {
+                      setProxy(i === drawer ? null : i);
+                      setSheet(null);
+                    }}
+                    style={styles.passBtn}
+                  />
+                ),
+              )}
+            </View>
+            </>
+          )}
+          {sheet === 'tips' && (
+            <>
+            <Text style={styles.tipsLead}>這不只是輪流回答。聽完之後，可以這樣接：</Text>
+            <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.5 }} contentContainerStyle={{ gap: 14 }}>
+              {FOLLOW_UPS.map((g) => (
+                <View key={g.title}>
+                  <Text style={styles.tipTitle}>
+                    {g.title}
+                    <Text style={styles.tipSub}>　{g.sub}</Text>
+                  </Text>
+                  <View style={styles.tipChips}>
+                    {g.lines.map((l) => (
+                      <Text key={l} style={styles.tipChip}>
+                        「{l}」
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            <PrimaryButton label="知道了" onPress={() => setSheet(null)} style={{ marginTop: 16 }} />
+            </>
+          )}
+          {sheet === 'recap' && (
+            <>
+            <Text style={styles.recapStat}>
+              {solo ? '' : `${players.length} 個人・`}聊了 {answered.length} 張
+              {skippedCount ? `・換掉 ${skippedCount} 張` : ''}
+            </Text>
+            {answered.length ? (
+              <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.46 }} contentContainerStyle={{ gap: 8 }}>
+                {answered.map(({ card: c }) => {
+                  const fav = favorites.includes(c.id);
+                  return (
+                    <View key={c.id} style={styles.recapRow}>
+                      <Text style={styles.recapMark}>{c.kind === 'wild' ? '✦' : STAGES[c.stage].mark}</Text>
+                      <Text style={styles.recapText}>{c.text}</Text>
+                      <IconButton
+                        label={fav ? '取消收藏' : '收藏這題'}
+                        onPress={() => toggleFavorite(c.id)}
+                        style={styles.recapHeart}
+                      >
+                        <HeartIcon filled={fav} color={fav ? colors.heart : colors.plum} size={16} />
+                      </IconButton>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Text style={[styles.ruleText, { textAlign: 'center' }]}>這一局還沒聊到任何一題。</Text>
+            )}
+            <Text style={[styles.ruleHint, { marginTop: 12 }]}>按 ♡ 把喜歡的題目收進「我的收藏」</Text>
+            <PrimaryButton label="好" onPress={() => setSheet(null)} style={{ marginTop: 14 }} />
+            </>
+          )}
+          {sheet === 'leave' && (
+            <>
+            <Text style={[styles.ruleText, { textAlign: 'center', marginBottom: 18 }]}>
+              已經聊了 {answered.length} 張牌，離開後這一局不會保留。
+            </Text>
+            <View style={styles.bottomRow}>
+              <GhostButton label="離開" onPress={leave} style={{ flex: 1 }} />
+              <PrimaryButton label="繼續聊" onPress={() => setSheet(null)} style={{ flex: 1.4 }} />
+            </View>
+            </>
+          )}
         </Sheet>
       )}
     </View>
