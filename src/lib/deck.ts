@@ -82,6 +82,16 @@ function roundRobin(pools: Question[][], quota: number): Question[] {
   return picked;
 }
 
+/** 每一層裡通用題最多佔的比例，其餘都用這個談話對象的專屬題；專屬題不夠時再用通用題補 */
+const GENERIC_SHARE = 0.3;
+
+/** 專屬題先抽，通用題只補一小部分；任一邊不夠時由另一邊補足 */
+function blend(mine: Question[][], common: Question[][], quota: number): Question[] {
+  const a = roundRobin(mine, Math.ceil(quota * (1 - GENERIC_SHARE)));
+  const b = roundRobin(common, quota - a.length);
+  return [...a, ...b, ...roundRobin(mine, quota - a.length - b.length)];
+}
+
 /** 從野卡裡挑一張這一層的；沒有就往淺一層找，再沒有就隨便一張 */
 function pickWild(pool: Question[], stage: StageId): Question | undefined {
   for (let l = stage; l >= 0; l--) {
@@ -93,6 +103,7 @@ function pickWild(pool: Question[], stage: StageId): Question | undefined {
 
 /**
  * 依設定組出一副牌，分成幾層依序排好：
+ * - 每一層以這個談話對象的專屬題為主，通用題最多佔 GENERIC_SHARE
  * - 第 0 層「暖身破冰」：不論選了哪些主題，都先用暖身題開場
  * - 之後依情境的深度一層一層往下（I 淺談 → II 走心 → III 深談），各層張數大致平均
  * - 某一層題目不夠時，缺的張數順延到下一層
@@ -105,9 +116,13 @@ export function buildDeck(s: Settings): DeckCard[] {
   const toCard = (q: Question, stage: StageId): DeckCard => ({ ...q, text: phrase(q.text, crowd), stage });
 
   const warmCount = Math.min(5, Math.max(2, Math.round(scene.count * 0.17)));
-  const warm = shuffle(QUESTIONS.filter((q) => q.level === 0 && q.kind !== 'wild' && fits(q))).slice(0, warmCount);
+  const split = (qs: Question[]) => [shuffle(qs.filter((q) => q.partner)), shuffle(qs.filter((q) => !q.partner))];
 
-  const wildPool = wildAllowed(s) ? shuffle(QUESTIONS.filter((q) => q.kind === 'wild' && fits(q))) : [];
+  const [warmMine, warmCommon] = split(QUESTIONS.filter((q) => q.level === 0 && q.kind !== 'wild' && fits(q)));
+  const warm = shuffle(blend([warmMine], [warmCommon], warmCount));
+
+  // 野卡同一層裡先挑專屬的
+  const wildPool = wildAllowed(s) ? split(QUESTIONS.filter((q) => q.kind === 'wild' && fits(q))).flat() : [];
   const wildCount = Math.min(wildPool.length, wildPool.length ? Math.max(1, Math.round(scene.count / 7)) : 0);
 
   const levels = scene.levels;
@@ -120,8 +135,12 @@ export function buildDeck(s: Settings): DeckCard[] {
   levels.forEach((level, i) => {
     // 餘數分給比較深的層
     const quota = base + (i >= levels.length - extra ? 1 : 0) + carry;
-    const pools = activeTopics(s).map((t) => shuffle(QUESTIONS.filter((q) => q.kind === t && q.level === level && fits(q))));
-    const picked = roundRobin(pools, quota);
+    const pools = activeTopics(s).map((t) => split(QUESTIONS.filter((q) => q.kind === t && q.level === level && fits(q))));
+    const picked = blend(
+      pools.map((p) => p[0]),
+      pools.map((p) => p[1]),
+      quota,
+    );
     carry = quota - picked.length;
     if (picked.length) layers.push(shuffle(picked).map((q) => toCard(q, level)));
   });
