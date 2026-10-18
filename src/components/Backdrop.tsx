@@ -8,11 +8,20 @@ import Animated, {
   withDelay,
   withRepeat,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
+import type { EditionId } from '../data/catalog';
 import { noise } from '../lib/noise';
 import { colors } from '../theme';
+
+/** 各版本的背景色調：經典是薰衣草紫配土耳其藍光，深夜限定偏玫瑰紫，爸媽聊聊偏杏桃暖色 */
+const TONES: Record<EditionId, { base: [string, string, string]; glow: [string, string] }> = {
+  classic: { base: [colors.bgTop, '#F4ECF6', colors.bgBottom], glow: ['rgba(169,227,220,0.35)', 'rgba(169,227,220,0)'] },
+  afterdark: { base: ['#E2D2EC', '#F1E3EE', '#F9EEE9'], glow: ['rgba(201,120,150,0.28)', 'rgba(201,120,150,0)'] },
+  parents: { base: ['#F4E4D6', '#F9EEE4', colors.bgBottom], glow: ['rgba(232,190,140,0.32)', 'rgba(232,190,140,0)'] },
+};
 
 /** 四角星（卡背上那種閃光） */
 export function Sparkle({ size = 12, color = colors.gold }: { size?: number; color?: string }) {
@@ -70,9 +79,26 @@ function Corner({ flipX, flipY }: { flipX?: boolean; flipY?: boolean }) {
   );
 }
 
-export function Backdrop({ corners = true }: { corners?: boolean }) {
+/** 一個版本的底色＋光暈；pos 是首頁滑到第幾頁（可以是小數），離 index 越遠越淡 */
+function ToneLayer({ edition, index, pos }: { edition: EditionId; index: number; pos: SharedValue<number> }) {
+  const tone = TONES[edition];
+  const style = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(pos.value - index)) }));
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, style]}>
+      <LinearGradient colors={tone.base} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={tone.glow}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.5 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
+
+function useStars() {
   const { width, height } = useWindowDimensions();
-  const stars = useMemo(() => {
+  return useMemo(() => {
     // 固定的偽亂數，避免每次 render 星星位置跳動
     return Array.from({ length: 14 }, (_, i) => ({
       x: noise(i, 11) * (width - 20),
@@ -81,16 +107,44 @@ export function Backdrop({ corners = true }: { corners?: boolean }) {
       delay: i * 260,
     }));
   }, [width, height]);
+}
+
+function Corners() {
+  return (
+    <>
+      <Corner />
+      <Corner flipX />
+      <Corner flipY />
+      <Corner flipX flipY />
+    </>
+  );
+}
+
+/** 首頁：左右滑動換版本時，背景色調跟著交叉淡換（星星與角落藤蔓只畫一份） */
+export function EditionBackdrop({ editions, pos }: { editions: EditionId[]; pos: SharedValue<number> }) {
+  const stars = useStars();
+  return (
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+      {editions.map((id, i) => (
+        <ToneLayer key={id} edition={id} index={i} pos={pos} />
+      ))}
+      {stars.map((s, i) => (
+        <Twinkle key={i} {...s} />
+      ))}
+      <Corners />
+    </View>
+  );
+}
+
+export function Backdrop({ corners = true, edition = 'classic' }: { corners?: boolean; edition?: EditionId }) {
+  const tone = TONES[edition];
+  const stars = useStars();
 
   return (
     <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+      <LinearGradient colors={tone.base} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
       <LinearGradient
-        colors={[colors.bgTop, '#F4ECF6', colors.bgBottom]}
-        locations={[0, 0.45, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-      <LinearGradient
-        colors={['rgba(169,227,220,0.35)', 'rgba(169,227,220,0)']}
+        colors={tone.glow}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.5 }}
         style={StyleSheet.absoluteFill}
@@ -98,14 +152,7 @@ export function Backdrop({ corners = true }: { corners?: boolean }) {
       {stars.map((s, i) => (
         <Twinkle key={i} {...s} />
       ))}
-      {corners && (
-        <>
-          <Corner />
-          <Corner flipX />
-          <Corner flipY />
-          <Corner flipX flipY />
-        </>
-      )}
+      {corners && <Corners />}
     </View>
   );
 }

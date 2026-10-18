@@ -1,14 +1,28 @@
-import { PARTNERS, SCENES, TOPIC_IDS, type PartnerId, type SceneId, type StageId, type TopicId } from '../data/catalog';
+import {
+  EDITION_IDS,
+  EDITIONS,
+  PARTNERS,
+  type CardKind,
+  type Edition,
+  type EditionId,
+  type PartnerId,
+  type Scene,
+  type SceneId,
+  type StageId,
+} from '../data/catalog';
 import { crowdOf, type Crowd } from '../data/guide';
 import { QUESTIONS, fitsTable, phrase, type Question } from '../data/questions';
 
 export type Settings = {
+  /** 經典版或特別版；特別版有自己的題庫、分層、情境與卡牌美術 */
+  edition: EditionId;
+  /** 談話對象；特別版固定，見 partnerOf() */
   partner: PartnerId;
   /** 一起玩的人，依輪流順序（2–8 位）；空字串代表沒填名字 */
   players: string[];
   scene: SceneId;
   /** 選定的主題；完全隨機時忽略 */
-  topics: TopicId[];
+  topics: CardKind[];
   random: boolean;
   wild: boolean;
 };
@@ -18,6 +32,7 @@ export const MAX_PLAYERS = 8;
 export const NAME_MAX = 12;
 
 export const DEFAULT_SETTINGS: Settings = {
+  edition: 'classic',
   partner: 'friend',
   players: ['', ''],
   scene: 'cafe',
@@ -31,16 +46,35 @@ export function cleanName(name: string) {
   return name.replace(/\|/g, '').slice(0, NAME_MAX);
 }
 
-/** 補足／裁切成 2–8 位 */
-export function normalizePlayers(players: readonly string[]): string[] {
-  const list = players.slice(0, MAX_PLAYERS).map(cleanName);
-  while (list.length < MIN_PLAYERS) list.push('');
+export function editionOf(s: Pick<Settings, 'edition'>): Edition {
+  return EDITIONS[s.edition] ?? EDITIONS.classic;
+}
+
+/** 這一局的談話對象：特別版固定（深夜限定是伴侶、爸媽聊聊是家人） */
+export function partnerOf(s: Settings): PartnerId {
+  return editionOf(s).partner ?? s.partner;
+}
+
+/** 這一局可以選的情境 */
+export function scenesOf(s: Pick<Settings, 'edition'>): Scene[] {
+  return editionOf(s).scenes;
+}
+
+export function sceneOf(s: Settings): Scene {
+  const scenes = scenesOf(s);
+  return scenes.find((x) => x.id === s.scene) ?? scenes[0];
+}
+
+/** 補足／裁切人數（預設 2–8 位；深夜限定固定 2 位） */
+export function normalizePlayers(players: readonly string[], [min, max]: [number, number] = [MIN_PLAYERS, MAX_PLAYERS]): string[] {
+  const list = players.slice(0, max).map(cleanName);
+  while (list.length < min) list.push('');
   return list;
 }
 
 /** 牌桌上顯示的玩家稱呼；和自己對話時是空陣列 */
 export function playerLabels(s: Settings): string[] {
-  if (s.partner === 'self') return [];
+  if (partnerOf(s) === 'self') return [];
   return s.players.map((n, i) => n.trim() || (i === 0 ? '你' : s.players.length === 2 ? '對方' : `玩家 ${i + 1}`));
 }
 
@@ -59,11 +93,13 @@ export function shuffle<T>(items: readonly T[]): T[] {
 }
 
 export function wildAllowed(s: Settings) {
-  return s.wild && s.partner !== 'self';
+  return s.wild && !!editionOf(s).wild && partnerOf(s) !== 'self';
 }
 
-export function activeTopics(s: Settings): TopicId[] {
-  return s.random || s.topics.length === 0 ? TOPIC_IDS : s.topics;
+export function activeTopics(s: Settings): CardKind[] {
+  const { kinds } = editionOf(s);
+  const picked = s.topics.filter((t) => kinds.includes(t));
+  return s.random || picked.length === 0 ? kinds : picked;
 }
 
 /** 牌桌上的一張牌：題目（{TA} 已換成這一桌的說法）＋它屬於哪一層 */
@@ -104,25 +140,29 @@ function pickWild(pool: Question[], stage: StageId): Question | undefined {
 /**
  * 依設定組出一副牌，分成幾層依序排好：
  * - 每一層以這個談話對象的專屬題為主，通用題最多佔 GENERIC_SHARE
- * - 第 0 層「暖身破冰」：不論選了哪些主題，都先用暖身題開場
- * - 之後依情境的深度一層一層往下（I 淺談 → II 走心 → III 深談），各層張數大致平均
+ * - 第 0 層「暖身破冰」：經典版不論選了哪些主題，都先用暖身題開場；特別版只抽選定主題的暖身題
+ * - 之後依情境的深度一層一層往下（I 淺談 → II 走心 → III 深談），各層張數大致平均；
+ *   情境有 plan 時照 plan 的張數（深夜限定：調情 → 前夕 → 激情 → 收尾）
  * - 某一層題目不夠時，缺的張數順延到下一層
  * - 互動野卡平均穿插在暖身之後的各層（不會是該層第一張），而且挑同一層深淺的
  */
 export function buildDeck(s: Settings): DeckCard[] {
-  const scene = SCENES.find((x) => x.id === s.scene) ?? SCENES[0];
+  const ed = editionOf(s);
+  const scene = sceneOf(s);
   const crowd = tableCrowd(s);
-  const fits = (q: Question) => fitsTable(q, s.partner, crowd);
+  const topics = activeTopics(s);
+  const fits = (q: Question) => fitsTable(q, partnerOf(s), crowd);
   const toCard = (q: Question, stage: StageId): DeckCard => ({ ...q, text: phrase(q.text, crowd), stage });
 
-  const warmCount = Math.min(5, Math.max(2, Math.round(scene.count * 0.17)));
+  const warmCount = scene.plan ? scene.plan[0] : Math.min(5, Math.max(2, Math.round(scene.count * 0.17)));
   const split = (qs: Question[]) => [shuffle(qs.filter((q) => q.partner)), shuffle(qs.filter((q) => !q.partner))];
 
-  const [warmMine, warmCommon] = split(QUESTIONS.filter((q) => q.level === 0 && q.kind !== 'wild' && fits(q)));
+  const warmKinds: CardKind[] = ed.warmByTopic ? topics : ed.kinds;
+  const [warmMine, warmCommon] = split(QUESTIONS.filter((q) => q.level === 0 && warmKinds.includes(q.kind) && fits(q)));
   const warm = shuffle(blend([warmMine], [warmCommon], warmCount));
 
   // 野卡同一層裡先挑專屬的
-  const wildPool = wildAllowed(s) ? split(QUESTIONS.filter((q) => q.kind === 'wild' && fits(q))).flat() : [];
+  const wildPool = wildAllowed(s) ? split(QUESTIONS.filter((q) => q.kind === ed.wild && fits(q))).flat() : [];
   const wildCount = Math.min(wildPool.length, wildPool.length ? Math.max(1, Math.round(scene.count / 7)) : 0);
 
   const levels = scene.levels;
@@ -131,11 +171,16 @@ export function buildDeck(s: Settings): DeckCard[] {
   const extra = rest - base * levels.length;
 
   const layers: DeckCard[][] = [warm.map((q) => toCard(q, 0))];
-  let carry = 0;
+  // 暖身題不夠時，缺的張數也順延到下一層
+  let carry = warmCount - warm.length;
   levels.forEach((level, i) => {
     // 餘數分給比較深的層
-    const quota = base + (i >= levels.length - extra ? 1 : 0) + carry;
-    const pools = activeTopics(s).map((t) => split(QUESTIONS.filter((q) => q.kind === t && q.level === level && fits(q))));
+    const quota = (scene.plan ? scene.plan[i + 1] : base + (i >= levels.length - extra ? 1 : 0)) + carry;
+    // 權重 n 就把同一個題池放 n 次，輪流抽時每一輪會抽到它 n 次
+    const pools = topics.flatMap((t) => {
+      const pool = split(QUESTIONS.filter((q) => q.kind === t && q.level === level && fits(q)));
+      return Array.from({ length: ed.weights?.[level]?.[t] ?? 1 }, () => pool);
+    });
     const picked = blend(
       pools.map((p) => p[0]),
       pools.map((p) => p[1]),
@@ -187,6 +232,7 @@ export function reshuffleRange<T>(deck: readonly T[], from: number, to: number):
 
 export function settingsToParams(s: Settings): Record<string, string> {
   return {
+    edition: s.edition,
     partner: s.partner,
     players: s.players.map(cleanName).join('|'),
     scene: s.scene,
@@ -201,17 +247,20 @@ export function settingsFromParams(p: Record<string, string | string[] | undefin
     const v = p[k];
     return Array.isArray(v) ? v[0] : v;
   };
+  const edition = EDITION_IDS.find((x) => x === get('edition')) ?? 'classic';
+  const ed = EDITIONS[edition];
   const topics = (get('topics') ?? '')
     .split(',')
-    .filter((t): t is TopicId => (TOPIC_IDS as string[]).includes(t));
+    .filter((t): t is CardKind => (ed.kinds as string[]).includes(t));
   const partner = PARTNERS.find((x) => x.id === get('partner'))?.id;
-  const scene = SCENES.find((x) => x.id === get('scene'))?.id;
+  const scene = ed.scenes.find((x) => x.id === get('scene'))?.id;
   const players = get('players');
   return {
+    edition,
     partner: partner ?? DEFAULT_SETTINGS.partner,
     // 舊網址只有一個 name（對方的名字）
-    players: normalizePlayers(players != null ? players.split('|') : ['', get('name') ?? '']),
-    scene: scene ?? DEFAULT_SETTINGS.scene,
+    players: normalizePlayers(players != null ? players.split('|') : ['', get('name') ?? ''], ed.players),
+    scene: scene ?? ed.scenes[0].id,
     topics,
     random: get('random') !== '0' || topics.length === 0,
     wild: get('wild') !== '0',

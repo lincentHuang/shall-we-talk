@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
-import { memo } from 'react';
+import { createContext, memo, useContext } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { CARD_BACK, STAGES, TOPICS, type CardKind, type StageId } from '../data/catalog';
+import { EDITIONS, editionOfKind, TOPICS, type CardKind, type EditionId, type StageId } from '../data/catalog';
+import type { Pose } from '../data/editions/poses';
+import { PoseArt } from './PoseArt';
 import { CARD_RATIO, fonts } from '../theme';
 import { Text } from './Text';
 
@@ -20,9 +22,14 @@ const artLayer = [StyleSheet.absoluteFill, { pointerEvents: 'none' as const }];
 /* 卡面美術裡「留白羊皮紙」的位置（相對卡片寬高） */
 const PANEL = { top: 0.583, bottom: 0.1, side: 0.135 };
 
-function questionSize(w: number, len: number) {
-  if (len > 30) return w * 0.054;
-  if (len > 22) return w * 0.059;
+/** 牌桌上用的是哪個版本：決定卡背（手牌、洗牌、牌堆都從這裡取） */
+export const EditionContext = createContext<EditionId>('classic');
+
+function questionSize(w: number, body: string) {
+  // 爸媽聊聊的雙面題分兩段、每段最多兩行，一律用最小一級才放得下四行
+  if (body.includes('\n') || body.length > 38) return w * 0.05;
+  if (body.length > 30) return w * 0.054;
+  if (body.length > 22) return w * 0.059;
   return w * 0.064;
 }
 
@@ -34,20 +41,39 @@ type FaceProps = {
   /** 收尾卡等特殊標題／頁尾 */
   label?: string;
   footer?: string;
+  /** 姿勢圖解牌：在拱窗裡畫人形圖 */
+  pose?: Pose;
   style?: StyleProp<ViewStyle>;
 };
 
-export const CardFace = memo(function CardFace({ kind, text, level, width, label, footer: footerText, style }: FaceProps) {
+export const CardFace = memo(function CardFace({
+  kind,
+  text,
+  level,
+  width,
+  label,
+  footer: footerText,
+  pose,
+  style,
+}: FaceProps) {
   const topic = TOPICS[kind];
+  const ed = editionOfKind(kind);
   const h = cardHeight(width);
-  const fs = questionSize(width, text.length);
+  // 爸媽聊聊的雙面題「爸媽說：⋯／孩子說：⋯」分成兩段，各自照身分讀
+  const body = text.replace('／孩子說：', '\n孩子說：');
+  const fs = questionSize(width, body);
+  // 深色留白的卡面（深夜限定）改用淺色字
+  const ink = topic.faceInk ?? topic.ink;
+  const trim = topic.faceTrim ?? ink;
   const footer =
-    footerText ?? (kind === 'wild' ? 'Wild Card' : level != null ? `${STAGES[level].mark} · ${STAGES[level].name}` : topic.en);
+    footerText ??
+    (kind === ed.wild ? 'Wild Card' : level != null ? `${ed.stages[level].mark} · ${ed.stages[level].name}` : topic.en);
 
   return (
     <View style={[{ width, height: h, borderRadius: cardRadius(width), overflow: 'hidden' }, style]}>
       <View style={artLayer}>
         <Image source={topic.face} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
+        {pose && <PoseArt pose={pose} width={width} height={h} />}
       </View>
       <View
         style={{
@@ -67,7 +93,7 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
             fontFamily: fonts.serifBold,
             fontSize: width * 0.038,
             lineHeight: width * 0.038 * 1.5,
-            color: topic.ink,
+            color: trim,
             letterSpacing: width * 0.012,
             opacity: 0.85,
           }}
@@ -80,12 +106,12 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
             fontFamily: fonts.serif,
             fontSize: fs,
             lineHeight: fs * 1.62,
-            color: topic.ink,
+            color: ink,
             textAlign: 'center',
             letterSpacing: fs * 0.04,
           }}
         >
-          {text}
+          {body}
         </Text>
         <Text
           allowFontScaling={false}
@@ -94,7 +120,7 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
             fontFamily: fonts.display,
             fontSize: width * 0.042,
             lineHeight: width * 0.042 * 1.3,
-            color: topic.ink,
+            color: trim,
             opacity: 0.7,
             letterSpacing: 1.5,
           }}
@@ -106,11 +132,21 @@ export const CardFace = memo(function CardFace({ kind, text, level, width, label
   );
 });
 
-export const CardBack = memo(function CardBack({ width, style }: { width: number; style?: StyleProp<ViewStyle> }) {
+export const CardBack = memo(function CardBack({
+  width,
+  edition,
+  style,
+}: {
+  width: number;
+  /** 沒指定就用牌桌上的版本（EditionContext） */
+  edition?: EditionId;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const current = useContext(EditionContext);
   return (
     <View style={[{ width, height: cardHeight(width), borderRadius: cardRadius(width), overflow: 'hidden' }, style]}>
       <View style={artLayer}>
-        <Image source={CARD_BACK} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
+        <Image source={EDITIONS[edition ?? current].back} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
       </View>
     </View>
   );

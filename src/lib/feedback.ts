@@ -37,17 +37,20 @@ AsyncStorage.getItem(MUTE_KEY)
 let players: Partial<Record<SoundName, AudioPlayer>> = {};
 let modeSet = false;
 
+/** 音效與背景音樂共用的音訊模式：尊重 iPhone 靜音鍵、不中斷別人的聲音、不在背景播放 */
+export function ensureAudioMode() {
+  if (modeSet) return;
+  modeSet = true;
+  setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers' }).catch(() => {});
+}
+
 function player(name: SoundName) {
-  if (!modeSet) {
-    modeSet = true;
-    // 尊重 iPhone 靜音鍵
-    setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers' }).catch(() => {});
-  }
+  ensureAudioMode();
   return (players[name] ??= createAudioPlayer(SOURCES[name]));
 }
 
 /** 網頁在使用者第一次互動前不允許播放聲音（例如直接打開牌桌網址） */
-function webAudioBlocked() {
+export function webAudioBlocked() {
   if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
   const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
   return activation ? !activation.hasBeenActive : false;

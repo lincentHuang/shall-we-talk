@@ -85,7 +85,7 @@ export default function Favorites() {
         <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(160)} style={styles.overlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(null)} accessibilityLabel="關閉" />
           <Animated.View entering={ZoomIn.duration(240).easing(Easing.out(Easing.cubic))} style={shadow(18, 0.35)}>
-            <CardFace kind={open.kind} level={open.level} text={phrase(open.text)} width={bigW} />
+            <CardFace kind={open.kind} level={open.level} text={phrase(open.text)} pose={open.pose} width={bigW} />
           </Animated.View>
           <Text style={styles.overlayHint}>點任意處關閉</Text>
         </Animated.View>

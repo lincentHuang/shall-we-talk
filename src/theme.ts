@@ -32,11 +32,21 @@ export const colors = {
   lineStrong: 'rgba(201,162,90,0.6)',
   /** 收藏愛心 */
   heart: '#B5536F',
+
+  // 特別版入口與介紹卡
+  /** 深夜限定：深紫酒紅底上的奶油色字、金色小字 */
+  nightInk: '#F6E9D6',
+  nightGold: '#E3C27A',
+  /** 爸媽聊聊：杏桃奶油底上的焦糖色字 */
+  hearthInk: '#6B4626',
+  hearthGold: '#9C7633',
 };
 
 export const gradients = {
   primary: ['#8F7BBE', '#6B5899'] as const,
   gold: ['#E8CF94', '#C9A25A', '#E8CF94'] as const,
+  night: ['#3B2352', '#6A2142'] as const,
+  hearth: ['#FCEFE3', '#F2D6BE'] as const,
 };
 
 export const radius = { sm: 10, md: 14, lg: 26, pill: 999 };

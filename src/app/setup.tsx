@@ -1,32 +1,35 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Backdrop, Sparkle } from '../components/Backdrop';
-import { IconButton, PrimaryButton } from '../components/Buttons';
-import { BackIcon, CloseIcon } from '../components/Icons';
+import { GhostButton, IconButton, PrimaryButton } from '../components/Buttons';
+import { CardBack } from '../components/Card';
+import { BackIcon, CloseIcon, SoundIcon } from '../components/Icons';
 import { SectionTitle } from '../components/Ornament';
+import { Sheet } from '../components/Sheet';
 import { Text } from '../components/Text';
-import { LEVEL_MARK, PARTNERS, SCENES, STAGES, TOPICS, TOPIC_IDS, type TopicId } from '../data/catalog';
+import { EDITION_IDS, EDITIONS, PARTNERS, TOPICS, type CardKind, type Edition } from '../data/catalog';
 import {
   buildDeck,
   cleanName,
   DEFAULT_SETTINGS,
-  MAX_PLAYERS,
-  MIN_PLAYERS,
   NAME_MAX,
   normalizePlayers,
+  partnerOf,
+  sceneOf,
   settingsToParams,
   stageSpans,
   type Settings,
 } from '../lib/deck';
 import { haptic } from '../lib/feedback';
-import { loadSettings, saveSettings } from '../lib/storage';
-import { colors, gradients, MAX_FONT_SCALE, radius, shadow, type, useTextHeight } from '../theme';
+import { setMusicOn, useMusicOn } from '../lib/music';
+import { adultConfirmed, confirmAdult, loadSettings, saveSettings } from '../lib/storage';
+import { colors, fonts, gradients, MAX_FONT_SCALE, radius, shadow, type, useTextHeight } from '../theme';
 
 /** 被選取時輕輕放大、出現金框 */
 function Selectable({
@@ -69,7 +72,36 @@ function SelectedBadge() {
   );
 }
 
+/** 特別版的介紹卡：卡背＋一句話＋這一版的流程 */
+function EditionIntro({ ed }: { ed: Edition }) {
+  const night = ed.id === 'afterdark';
+  const ink = night ? colors.nightInk : colors.hearthInk;
+  const sub = night ? colors.nightGold : colors.hearthGold;
+  return (
+    <LinearGradient
+      colors={night ? gradients.night : gradients.hearth}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.intro}
+    >
+      <CardBack edition={ed.id} width={58} style={shadow(5, 0.3)} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[styles.introEn, { color: sub }]}>{ed.en}</Text>
+        <Text style={[styles.introTagline, { color: ink }]}>{ed.tagline}</Text>
+        <Text style={[styles.introFlow, { color: sub }]}>
+          {Object.values(ed.stages)
+            .map((st) => st.name)
+            .join(' → ')}
+        </Text>
+      </View>
+    </LinearGradient>
+  );
+}
+
 export default function Setup() {
+  const params = useLocalSearchParams<{ edition?: string }>();
+  const edition = EDITION_IDS.find((x) => x === params.edition) ?? 'classic';
+  const ed = EDITIONS[edition];
   const { width } = useWindowDimensions();
   const colW = Math.min(width, 560);
   const gap = 12;
@@ -79,14 +111,26 @@ export default function Setup() {
   // 底部浮動按鈕的實際高度（含手勢列），讓清單最後一項不會被蓋住
   const [footerH, setFooterH] = useState(140);
 
-  const [s, setS] = useState<Settings>(DEFAULT_SETTINGS);
+  const [s, setS] = useState<Settings>(() => ({
+    ...DEFAULT_SETTINGS,
+    edition,
+    scene: ed.scenes[0].id,
+    players: normalizePlayers([], ed.players),
+  }));
   useEffect(() => {
-    loadSettings().then(setS);
-  }, []);
+    loadSettings(edition).then(setS);
+  }, [edition]);
+
+  // 成人內容：第一次進來先確認年滿 18 歲
+  const [ageGate, setAgeGate] = useState(false);
+  useEffect(() => {
+    if (ed.adult) adultConfirmed().then((ok) => setAgeGate(!ok));
+  }, [ed.adult]);
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   const update = (patch: Partial<Settings>) => setS((prev) => ({ ...prev, ...patch }));
 
-  const toggleTopic = (id: TopicId) =>
+  const toggleTopic = (id: CardKind) =>
     setS((prev) => {
       const base = prev.random ? [] : prev.topics;
       const topics = base.includes(id) ? base.filter((t) => t !== id) : [...base, id];
@@ -97,15 +141,19 @@ export default function Setup() {
     setS((prev) => ({ ...prev, players: prev.players.map((n, k) => (k === i ? cleanName(name) : n)) }));
   const addPlayer = () => {
     haptic.tick();
-    setS((prev) => ({ ...prev, players: normalizePlayers([...prev.players, '']) }));
+    setS((prev) => ({ ...prev, players: normalizePlayers([...prev.players, ''], ed.players) }));
   };
   const removePlayer = (i: number) =>
-    setS((prev) => ({ ...prev, players: normalizePlayers(prev.players.filter((_, k) => k !== i)) }));
+    setS((prev) => ({ ...prev, players: normalizePlayers(prev.players.filter((_, k) => k !== i), ed.players) }));
 
-  const scene = SCENES.find((x) => x.id === s.scene) ?? SCENES[0];
+  const [minPlayers, maxPlayers] = ed.players;
+  const scene = sceneOf(s);
   const deck = useMemo(() => buildDeck(s), [s]);
   const layerCount = useMemo(() => stageSpans(deck).length, [deck]);
-  const isSelf = s.partner === 'self';
+  const isSelf = partnerOf(s) === 'self';
+  const wild = ed.wild ? TOPICS[ed.wild] : null;
+  const classic = ed.id === 'classic';
+  const musicOn = useMusicOn();
 
   const start = () => {
     saveSettings(s);
@@ -114,14 +162,14 @@ export default function Setup() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Backdrop corners={false} />
+      <Backdrop corners={false} edition={edition} />
       <SafeAreaView style={{ flex: 1, alignItems: 'center' }} edges={['top', 'left', 'right']}>
         <View style={[styles.header, { width: colW }]}>
           <View style={[styles.headerBg, { left: -(width - colW) / 2 - 1, right: -(width - colW) / 2 - 1 }]} />
-          <IconButton label="返回" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
+          <IconButton label="返回" onPress={goBack}>
             <BackIcon />
           </IconButton>
-          <Text style={styles.headerTitle}>準備牌局</Text>
+          <Text style={styles.headerTitle}>{classic ? '準備牌局' : ed.name}</Text>
           <View style={{ width: 42 }} />
         </View>
 
@@ -132,8 +180,19 @@ export default function Setup() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={{ width: colW, paddingHorizontal: 20 }}>
+            {!classic && <EditionIntro ed={ed} />}
+
             {/* ---------- I. 對象 ---------- */}
-            <SectionTitle mark="I" title="談話對象" sub="今天想和誰聊聊？" />
+            {classic ? (
+              <SectionTitle mark="I" title="談話對象" sub="今天想和誰聊聊？" />
+            ) : (
+              <SectionTitle
+                mark="I"
+                title="一起玩的人"
+                sub={minPlayers === maxPlayers ? '只限你們兩個人，照順序輪流' : '爸媽、孩子、阿公阿嬤都可以一起玩'}
+              />
+            )}
+            {classic && (
             <View style={styles.chips}>
               {PARTNERS.map((p) => {
                 const on = s.partner === p.id;
@@ -166,10 +225,11 @@ export default function Setup() {
                 );
               })}
             </View>
+            )}
             {!isSelf && (
-              <View style={styles.players}>
+              <View style={[styles.players, !classic && { marginTop: 0 }]}>
                 <View style={styles.playersHead}>
-                  <Text style={styles.nameLabel}>一起玩的人</Text>
+                  {classic && <Text style={styles.nameLabel}>一起玩的人</Text>}
                   <Text style={styles.playersMeta}>{s.players.length} 人・照順序輪流抽牌回答</Text>
                 </View>
                 {s.players.map((name, i) => (
@@ -186,16 +246,16 @@ export default function Setup() {
                       returnKeyType="done"
                       accessibilityLabel={`第 ${i + 1} 位的名字`}
                     />
-                    {s.players.length > MIN_PLAYERS && (
+                    {s.players.length > minPlayers && (
                       <IconButton label={`移除第 ${i + 1} 位`} onPress={() => removePlayer(i)} style={styles.removeBtn}>
                         <CloseIcon size={13} color={colors.inkSoft} />
                       </IconButton>
                     )}
                   </View>
                 ))}
-                {s.players.length < MAX_PLAYERS && (
+                {s.players.length < maxPlayers && (
                   <Pressable accessibilityRole="button" onPress={addPlayer} style={styles.addPlayer}>
-                    <Text style={styles.addPlayerText}>＋ 再加一位（最多 {MAX_PLAYERS} 人）</Text>
+                    <Text style={styles.addPlayerText}>＋ 再加一位（最多 {maxPlayers} 人）</Text>
                   </Pressable>
                 )}
               </View>
@@ -203,9 +263,9 @@ export default function Setup() {
 
             {/* ---------- II. 情境 ---------- */}
             <View style={{ height: 30 }} />
-            <SectionTitle mark="II" title="聊天情境" sub="情境會決定題目的深淺與張數" />
+            <SectionTitle mark="II" title={ed.copy.scene[0]} sub={ed.copy.scene[1]} />
             <View style={styles.grid}>
-              {SCENES.map((sc) => {
+              {ed.scenes.map((sc) => {
                 const on = s.scene === sc.id;
                 return (
                   <Selectable
@@ -216,7 +276,20 @@ export default function Setup() {
                     style={{ width: tileW, height: tileW * 0.78 + textH(SCENE_TEXT_H, 21) }}
                   >
                     <View style={[styles.sceneTile, on ? styles.tileOn : styles.tileOff]}>
-                      <Image source={sc.image} style={{ width: '100%', height: tileW * 0.78 }} contentFit="cover" />
+                      {sc.image ? (
+                        <Image source={sc.image} style={{ width: '100%', height: tileW * 0.78 }} contentFit="cover" />
+                      ) : (
+                        // 沒有插畫的情境（深夜限定的節奏）：用大字張數代替
+                        <LinearGradient
+                          colors={gradients.night}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={[styles.sceneCount, { height: tileW * 0.78 }]}
+                        >
+                          <Text style={styles.sceneCountNum}>{sc.count}</Text>
+                          <Text style={styles.sceneCountUnit}>cards</Text>
+                        </LinearGradient>
+                      )}
                       <View style={styles.sceneText}>
                         <Text numberOfLines={1} style={styles.sceneName}>
                           {sc.name}
@@ -225,7 +298,7 @@ export default function Setup() {
                           {sc.mood}
                         </Text>
                         <Text numberOfLines={1} style={styles.sceneMeta}>
-                          {[STAGES[0].mark, ...sc.levels.map((l) => LEVEL_MARK[l])].join(' · ')}　約 {sc.count} 張
+                          {([0, ...sc.levels] as const).map((l) => ed.stages[l].mark).join(' · ')}　約 {sc.count} 張
                         </Text>
                       </View>
                       {on && <SelectedBadge />}
@@ -237,7 +310,7 @@ export default function Setup() {
 
             {/* ---------- III. 主題 ---------- */}
             <View style={{ height: 30 }} />
-            <SectionTitle mark="III" title="話題主題" sub="可複選；不選就是完全隨機" />
+            <SectionTitle mark="III" title={ed.copy.topic[0]} sub={ed.copy.topic[1]} />
             <Selectable
               label="完全隨機"
               selected={s.random}
@@ -260,14 +333,14 @@ export default function Setup() {
                     adjustsFontSizeToFit
                     style={[styles.randomSub, s.random && { color: colors.onPrimarySoft }]}
                   >
-                    所有主題混在一起，交給命運決定
+                    {classic ? '所有主題混在一起，交給命運決定' : '全部混在一起，交給命運決定'}
                   </Text>
                 </View>
                 <Text style={[styles.randomEn, s.random && { color: colors.goldLight }]}>Fate</Text>
               </LinearGradient>
             </Selectable>
             <View style={styles.grid}>
-              {TOPIC_IDS.map((id) => {
+              {ed.kinds.map((id) => {
                 const t = TOPICS[id];
                 const on = !s.random && s.topics.includes(id);
                 return (
@@ -295,7 +368,8 @@ export default function Setup() {
               })}
             </View>
 
-            {/* 野卡開關 */}
+            {/* 野卡開關（深夜限定沒有野卡：撩撥任務本身就是互動） */}
+            {wild && (
             <Pressable
               accessibilityRole="switch"
               accessibilityState={{ checked: s.wild && !isSelf, disabled: isSelf }}
@@ -306,13 +380,38 @@ export default function Setup() {
               }}
               style={[styles.wildRow, isSelf && { opacity: 0.5 }]}
             >
-              <Image source={TOPICS.wild.thumb} style={styles.wildThumb} contentFit="cover" />
+              <Image source={wild.thumb} style={styles.wildThumb} contentFit="cover" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.wildTitle}>加入互動野卡</Text>
-                <Text style={styles.wildSub}>{isSelf ? '一個人的時候先休息一下' : '偶爾放下問答，一起做一件小事'}</Text>
+                <Text style={styles.wildTitle}>加入{wild.name}</Text>
+                <Text style={styles.wildSub}>
+                  {isSelf ? '一個人的時候先休息一下' : classic ? '偶爾放下問答，一起做一件小事' : wild.desc}
+                </Text>
               </View>
               <View style={[styles.switch, s.wild && !isSelf && styles.switchOn]}>
                 <View style={[styles.knob, s.wild && !isSelf && { transform: [{ translateX: 18 }] }]} />
+              </View>
+            </Pressable>
+            )}
+
+            {/* 背景音樂開關（每個版本、每一局都一樣，設定記在手機上） */}
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: musicOn }}
+              onPress={() => {
+                haptic.tick();
+                setMusicOn(!musicOn);
+              }}
+              style={[styles.wildRow, { marginTop: wild ? 12 : 18 }]}
+            >
+              <View style={styles.musicIcon}>
+                <SoundIcon size={24} color={colors.goldDeep} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.wildTitle}>背景音樂</Text>
+                <Text style={styles.wildSub}>依情境播放輕柔配樂</Text>
+              </View>
+              <View style={[styles.switch, musicOn && styles.switchOn]}>
+                <View style={[styles.knob, musicOn && { transform: [{ translateX: 18 }] }]} />
               </View>
             </Pressable>
           </View>
@@ -334,6 +433,26 @@ export default function Setup() {
           </SafeAreaView>
         </View>
       </SafeAreaView>
+
+      {ageGate && (
+        <Sheet title="年滿 18 歲了嗎？" onClose={goBack}>
+          <Text style={styles.gateText}>
+            「{ed.name}」是給成年伴侶的情慾卡牌，內容包含親密接觸與性愛的提問和任務。
+          </Text>
+          <Text style={styles.gateText}>
+            請確認你們都已年滿 18 歲、彼此同意一起玩。任何一張牌都可以換掉，喊「紅燈」就停下來。
+          </Text>
+          <PrimaryButton
+            label="我們都滿 18 歲"
+            onPress={() => {
+              confirmAdult();
+              setAgeGate(false);
+            }}
+            style={{ marginTop: 16 }}
+          />
+          <GhostButton label="先不要" onPress={goBack} style={{ marginTop: 10 }} />
+        </Sheet>
+      )}
     </View>
   );
 }
@@ -433,6 +552,25 @@ const styles = StyleSheet.create({
   sceneName: { ...type.subtitle, color: colors.plum, letterSpacing: 1 },
   sceneMood: { ...type.footnote, color: colors.inkSoft, marginTop: 1 },
   sceneMeta: { ...type.scriptS, color: colors.goldDeep, marginTop: 2 },
+  sceneCount: { width: '100%', alignItems: 'center', justifyContent: 'center' },
+  sceneCountNum: { ...type.numeralXL, color: colors.nightGold },
+  sceneCountUnit: { ...type.script, color: colors.nightInk, opacity: 0.8, letterSpacing: 2 },
+  intro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 14,
+    marginTop: 14,
+    marginBottom: 24,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    ...shadow(6, 0.18),
+  },
+  introEn: { ...type.script, letterSpacing: 1 },
+  introTagline: { ...type.subtitle, letterSpacing: 1 },
+  introFlow: { ...type.caption, fontFamily: fonts.serifBold, letterSpacing: 1, marginTop: 2 },
+  gateText: { ...type.body, color: colors.ink, letterSpacing: 0.5, marginBottom: 8 },
   badge: {
     position: 'absolute',
     top: 8,
@@ -473,6 +611,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   wildThumb: { width: 52, height: 52, borderRadius: radius.sm },
+  musicIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(201,162,90,0.16)',
+  },
   wildTitle: { ...type.subtitle, color: '#6E4E17', letterSpacing: 1 },
   wildSub: { ...type.footnote, color: colors.inkSoft, marginTop: 2 },
   switch: {

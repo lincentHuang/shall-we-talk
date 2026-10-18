@@ -21,7 +21,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { Backdrop, Sparkle } from '../components/Backdrop';
 import { GhostButton, IconButton, PrimaryButton } from '../components/Buttons';
-import { CardBack, CardFace, cardHeight, cardRadius } from '../components/Card';
+import { CardBack, CardFace, cardHeight, cardRadius, EditionContext } from '../components/Card';
 import {
   CHOOSING,
   FAN_MAX,
@@ -36,18 +36,21 @@ import { Divider } from '../components/Ornament';
 import { Sheet } from '../components/Sheet';
 import { ShuffleLayer } from '../components/ShuffleLayer';
 import { Text } from '../components/Text';
-import { SCENES, STAGES } from '../data/catalog';
-import { CLOSING, crowdOf, FOLLOW_UPS, followUpTip, OPENING } from '../data/guide';
+import { TOPICS } from '../data/catalog';
+import { crowdOf, followUpTip, GUIDES } from '../data/guide';
 import {
   buildDeck,
+  editionOf,
   moveCard,
   playerLabels,
   reshuffleRange,
+  sceneOf,
   settingsFromParams,
   stageSpans,
   type DeckCard,
 } from '../lib/deck';
 import { haptic, playSound, setMuted, useMuted, warmUpSounds } from '../lib/feedback';
+import { useBackgroundMusic } from '../lib/music';
 import { noise } from '../lib/noise';
 import { toggleFavorite, useFavorites } from '../lib/storage';
 import { CARD_RATIO, colors, fonts, MAX_FONT_SCALE, radius, shadow, type, useTextHeight } from '../theme';
@@ -71,15 +74,8 @@ const SHEET_TITLES: Record<SheetName, string> = {
 /** 聊過的牌；skipped 表示被「換一張」換掉 */
 type LogEntry = { card: DeckCard; skipped: boolean };
 
-const RULES_KEY = 'buhui.rules.seen.v2';
-
-const RULES: [string, string, string][] = [
-  ['I', '開場', '一個人念出開場白，大家放下手機、安靜下來。'],
-  ['II', '抽牌', '牌分成暖身、淺談、走心、深談幾層，由淺入深，一層聊完再往下。'],
-  ['III', '回答', '輪到的人回答。不想答可以「換一張」，也可以「請別人答」。'],
-  ['IV', '接話', '其他人可以追問、回饋、鼓勵。一句「然後呢？」常常比給建議更好。'],
-  ['V', '收尾', '最後每個人說說今天的感受。喜歡的題目按 ♡ 收藏。'],
-];
+/** 每個版本的玩法不同，第一次玩各自先看一次 */
+const rulesKey = (edition: string) => (edition === 'classic' ? 'buhui.rules.seen.v2' : `buhui.rules.seen.${edition}.v1`);
 
 /* ---------- 翻牌瞬間的金色星芒 ---------- */
 
@@ -130,7 +126,10 @@ export default function Play() {
   // 只在進入時讀一次設定
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const settings = useMemo(() => settingsFromParams(params), []);
-  const scene = SCENES.find((x) => x.id === settings.scene) ?? SCENES[0];
+  const ed = editionOf(settings);
+  const guide = GUIDES[ed.id];
+  const stages = ed.stages;
+  const scene = sceneOf(settings);
   const players = useMemo(() => playerLabels(settings), [settings]);
   const crowd = crowdOf(players.length);
   const solo = crowd === 'self';
@@ -159,13 +158,14 @@ export default function Play() {
 
   // 第一次玩先看玩法，之後每一局都從開場白開始
   useEffect(() => {
-    AsyncStorage.getItem(RULES_KEY)
+    const key = rulesKey(ed.id);
+    AsyncStorage.getItem(key)
       .then((v) => {
-        if (!v) AsyncStorage.setItem(RULES_KEY, '1').catch(() => {});
+        if (!v) AsyncStorage.setItem(key, '1').catch(() => {});
         setSheet(v ? 'opening' : 'rules');
       })
       .catch(() => setSheet('opening'));
-  }, []);
+  }, [ed.id]);
 
   /* ---------- 版面：上方翻牌區、下方扇形手牌 ---------- */
 
@@ -201,7 +201,7 @@ export default function Play() {
   const spanIdx = Math.max(0, spans.findIndex((sp) => pos >= sp.start && pos < sp.end));
   const span = spans[spanIdx] ?? { stage: 0 as const, start: 0, end: deck.length };
   const nextSpan = spans[spanIdx + 1];
-  const stage = STAGES[span.stage];
+  const stage = stages[span.stage];
   const stageSize = span.end - span.start;
 
   const done = phase === 'done';
@@ -209,6 +209,11 @@ export default function Play() {
   const drawnInStage = pos - span.start + (onDeck ? 0 : 1);
   const remaining = done ? 0 : span.end - pos - (onDeck ? 0 : 1);
   const card = deck[Math.min(pos, deck.length - 1)];
+
+  // 背景音樂：有 musicByStage 的版本依階段換曲（換層介紹出現時 pos 已指向新一層，所以立刻換；收尾分享用最後一段的曲子），
+  // 其他版本整局同一首（情境的 music）
+  const trackId = ed.musicByStage?.[done ? 3 : span.stage] ?? scene.music ?? null;
+  useBackgroundMusic(trackId);
 
   // 攤開在手上的只有這一層的牌：挑牌時從 pos 開始，抽出一張後從下一張開始
   const fanStart = pos + (onDeck ? 0 : 1);
@@ -614,7 +619,9 @@ export default function Play() {
 
   /* ---------- 文案 ---------- */
 
-  const isWild = card?.kind === 'wild';
+  const isWild = card?.kind === ed.wild;
+  /** 輪到的人要做的事：回答、出手、坦白 */
+  const act = (card && TOPICS[card.kind].act) ?? '回答';
   const turnText = (() => {
     switch (phase) {
       case 'opening':
@@ -624,13 +631,13 @@ export default function Play() {
       case 'stage':
         return '準備往下一層';
       case 'done':
-        return '收尾分享';
+        return guide.closingLabel;
       case 'ready':
         return solo ? '挑一張想聊的牌' : `輪到「${players[drawer]}」抽牌`;
       default:
         if (isWild && phase !== 'drawing') return '野卡！大家一起完成它';
         if (solo) return '慢慢想，誠實地回答自己';
-        return proxy == null ? `輪到「${players[answerer]}」回答` : `改由「${players[answerer]}」回答`;
+        return proxy == null ? `輪到「${players[answerer]}」${act}` : `改由「${players[answerer]}」${act}`;
     }
   })();
 
@@ -644,11 +651,11 @@ export default function Play() {
       case 'discarding':
         if (isWild) return { text: '完成之後，再抽下一張' };
         if (solo) return { text: '想不到，就先寫下第一個念頭' };
-        return { text: followUpTip(pos, span.stage), onPress: () => setSheet('tips') };
+        return { text: followUpTip(pos, span.stage, ed.id), onPress: () => setSheet('tips') };
       case 'stage':
         return { text: '慢慢來，準備好了再繼續' };
       case 'done':
-        return { text: solo ? '今天辛苦了' : '每個人都說一點，這一局就圓滿了' };
+        return { text: solo ? '今天辛苦了' : guide.closingHint };
       default:
         return { text: '' };
     }
@@ -667,8 +674,9 @@ export default function Play() {
   };
 
   return (
+    <EditionContext.Provider value={ed.id}>
     <View style={{ flex: 1 }}>
-      <Backdrop corners={false} />
+      <Backdrop corners={false} edition={ed.id} />
       <SafeAreaView style={{ flex: 1, alignItems: 'center' }}>
         {/* 頂部：情境名稱＋目前在第幾層 */}
         <View style={[styles.header, { width: colW }]}>
@@ -677,12 +685,12 @@ export default function Play() {
           </IconButton>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`牌局進度：${done ? '收尾分享' : `${stage.name}，第 ${drawnInStage} 張，共 ${stageSize} 張`}`}
+            accessibilityLabel={`牌局進度：${done ? guide.closingLabel : `${stage.name}，第 ${drawnInStage} 張，共 ${stageSize} 張`}`}
             onPress={() => setSheet('stages')}
             style={{ alignItems: 'center', flex: 1 }}
           >
             <Text numberOfLines={1} style={styles.headerTitle}>
-              {scene.name}
+              {ed.id === 'classic' ? scene.name : ed.name}
             </Text>
             <View style={styles.progressRow}>
               <View style={styles.dots}>
@@ -693,7 +701,7 @@ export default function Play() {
                   />
                 ))}
               </View>
-              <Text style={styles.headerSub}>{done ? '收尾分享' : stage.name}</Text>
+              <Text style={styles.headerSub}>{done ? guide.closingLabel : stage.name}</Text>
               {!done && (
                 <Text style={styles.headerCount}>
                   {drawnInStage} / {stageSize}
@@ -702,7 +710,7 @@ export default function Play() {
             </View>
           </Pressable>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <IconButton label={muted ? '開啟音效' : '關閉音效'} onPress={() => setMuted(!muted)}>
+            <IconButton label={muted ? '開啟聲音' : '關閉聲音'} onPress={() => setMuted(!muted)}>
               <SoundIcon off={muted} size={18} />
             </IconButton>
             <IconButton label="玩法說明" onPress={() => setSheet('rules')}>
@@ -726,7 +734,7 @@ export default function Play() {
             </Animated.Text>
             {canPass && (
               <Pressable accessibilityRole="button" hitSlop={8} onPress={passAnswer} style={styles.passChip}>
-                <Text style={styles.passText}>{proxy == null ? '請別人答' : '換人答'}</Text>
+                <Text style={styles.passText}>{proxy == null ? (ed.id === 'afterdark' ? '請對方來' : '請別人答') : '換人答'}</Text>
               </Pressable>
             )}
           </View>
@@ -762,7 +770,7 @@ export default function Play() {
                   <Text style={styles.slotHintEn}>pick a card</Text>
                   {nextSpan && (
                     <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setSheet('stages')} style={styles.slotLink}>
-                      <Text style={styles.slotLinkText}>聊夠了？往下一層　›</Text>
+                      <Text style={styles.slotLinkText}>{guide.skipLabel}　›</Text>
                     </Pressable>
                   )}
                 </Animated.View>
@@ -775,7 +783,7 @@ export default function Play() {
                   entering={ZoomIn.springify().damping(15)}
                   style={[styles.stagePanel, slotRect, shadow(12, 0.24)]}
                 >
-                  <Text style={styles.stageEyebrow}>往下一層</Text>
+                  <Text style={styles.stageEyebrow}>{guide.nextStage}</Text>
                   <Text style={styles.stageMark}>{stage.mark}</Text>
                   <Text style={styles.stageName}>{stage.name}</Text>
                   <Divider width={Math.min(140, geo.cardW * 0.5)} />
@@ -858,7 +866,7 @@ export default function Play() {
                         frontStyle,
                       ]}
                     >
-                      <CardFace kind={card.kind} level={card.stage} text={card.text} width={geo.cardW} />
+                      <CardFace kind={card.kind} level={card.stage} text={card.text} pose={card.pose} width={geo.cardW} />
                       <Animated.View
                         style={[
                           { position: 'absolute', pointerEvents: 'none', top: -geo.cardH * 0.25, height: geo.cardH * 1.5, width: geo.cardW * 0.42 },
@@ -885,7 +893,13 @@ export default function Play() {
                   entering={ZoomIn.springify().damping(14)}
                   style={{ position: 'absolute', left: slotRect.left, top: slotRect.top, ...shadow(16, 0.32) }}
                 >
-                  <CardFace kind="wild" label="收尾分享" footer="Fin." width={geo.cardW} text={CLOSING[crowd]} />
+                  <CardFace
+                    kind={guide.closingKind}
+                    label={guide.closingLabel}
+                    footer={guide.closingFooter}
+                    width={geo.cardW}
+                    text={guide.closing[crowd]}
+                  />
                 </Animated.View>
               )}
             </>
@@ -955,10 +969,13 @@ export default function Play() {
 
       {/* 只用一個 Sheet：面板之間切換時只換內容，不會整個重新滑入 */}
       {sheet && (
-        <Sheet title={SHEET_TITLES[sheet]} onClose={sheet === 'rules' ? closeRules : sheet === 'opening' ? beginGame : closeSheet}>
+        <Sheet
+          title={sheet === 'tips' ? guide.tipsTitle : SHEET_TITLES[sheet]}
+          onClose={sheet === 'rules' ? closeRules : sheet === 'opening' ? beginGame : closeSheet}
+        >
           {sheet === 'rules' && (
             <>
-            {RULES.map(([m, title, text]) => (
+            {guide.rules.map(([m, title, text]) => (
               <View key={m} style={styles.rule}>
                 <Text style={styles.ruleMark}>{m}</Text>
                 <Text style={styles.ruleText}>
@@ -967,15 +984,15 @@ export default function Play() {
                 </Text>
               </View>
             ))}
-            <Text style={styles.ruleHint}>手勢：手指滑過扇形手牌挑一張，往上拉出（或再點一下）就抽到它；聊完的牌左右滑走。</Text>
+            <Text style={styles.ruleHint}>{guide.ruleHint}</Text>
             <PrimaryButton label={phase === 'opening' ? '下一步：開場' : '知道了'} onPress={closeRules} style={{ marginTop: 16 }} />
             </>
           )}
           {sheet === 'opening' && (
             <>
-            <Text style={styles.openingWho}>{OPENING[crowd].who}</Text>
+            <Text style={styles.openingWho}>{guide.opening[crowd].who}</Text>
             <View style={styles.speech}>
-              <Text style={styles.speechText}>{OPENING[crowd].text}</Text>
+              <Text style={styles.speechText}>{guide.opening[crowd].text}</Text>
             </View>
             <PrimaryButton label="準備好了" sub="Shuffle the deck" onPress={beginGame} style={{ marginTop: 18 }} />
             <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setSheet('rules')} style={styles.textLink}>
@@ -986,7 +1003,7 @@ export default function Play() {
           {sheet === 'stages' && (
             <>
             {spans.map((sp, i) => {
-              const st = STAGES[sp.stage];
+              const st = stages[sp.stage];
               const now = !done && i === spanIdx;
               const past = done || i < spanIdx;
               const size = sp.end - sp.start;
@@ -1007,7 +1024,7 @@ export default function Play() {
               <View style={{ marginTop: 10, gap: 10 }}>
                 {nextSpan && (
                   <PrimaryButton
-                    label={`直接進入${STAGES[nextSpan.stage].name}`}
+                    label={`直接進入${stages[nextSpan.stage].name}`}
                     sub={phase === 'ready' && remaining > 0 ? `這一層剩下的 ${remaining} 張會跳過` : undefined}
                     onPress={() => jumpTo(nextSpan.start)}
                   />
@@ -1038,9 +1055,9 @@ export default function Play() {
           )}
           {sheet === 'tips' && (
             <>
-            <Text style={styles.tipsLead}>這不只是輪流回答。聽完之後，可以這樣接：</Text>
+            <Text style={styles.tipsLead}>{guide.tipsLead}</Text>
             <ScrollView nestedScrollEnabled style={{ maxHeight: winH * 0.5 }} contentContainerStyle={{ gap: 14 }}>
-              {FOLLOW_UPS.map((g) => (
+              {guide.followUps.map((g) => (
                 <View key={g.title}>
                   <Text style={styles.tipTitle}>
                     {g.title}
@@ -1071,7 +1088,7 @@ export default function Play() {
                   const fav = favorites.includes(c.id);
                   return (
                     <View key={c.id} style={styles.recapRow}>
-                      <Text style={styles.recapMark}>{c.kind === 'wild' ? '✦' : STAGES[c.stage].mark}</Text>
+                      <Text style={styles.recapMark}>{c.kind === ed.wild ? '✦' : stages[c.stage].mark}</Text>
                       <Text style={styles.recapText}>{c.text}</Text>
                       <IconButton
                         label={fav ? '取消收藏' : '收藏這題'}
@@ -1105,6 +1122,7 @@ export default function Play() {
         </Sheet>
       )}
     </View>
+    </EditionContext.Provider>
   );
 }
 

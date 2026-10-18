@@ -19,7 +19,17 @@
 - **互動野卡**：穿插在各層裡「大家一起做一件事」的卡，深淺跟著那一層走（淺談是合照、點歌，深談是說出想謝謝的事）
 - **挑牌**：洗好的這一層牌攤成扇形手牌（像抽鬼牌），手指在牌上左右滑動，指到的那張會浮起來並輕震一下；往上拉出、或再點一下就抽到它。不想挑也可以按「隨機抽一張」
 - **動態**：兩輪鴿尾式洗牌、扇形攤牌、3D 翻牌＋金色星芒、左右滑走；搭配音效與觸覺回饋
+- **背景音樂**：每個情境一首配樂（咖啡廳是 bossa nova、深夜長聊是 lo-fi、微醺餐桌是爵士⋯⋯），深夜限定則隨四個階段換曲、一路升溫；換曲時交叉淡入淡出。準備頁可以關掉背景音樂，牌桌右上角的喇叭會同時關掉音效與音樂
 - **收藏**：喜歡的題目按 ♡，在首頁「我的收藏」查看
+
+## 特別版
+
+首頁左右滑動（或點下方頁籤、網頁上按 ← →）就能在經典版、深夜限定、爸媽聊聊三副牌之間切換，背景色調、標題和展示的卡背卡面跟著換，「開始一局」與「直接隨機抽」也會用目前這一版。特別版各有自己的題庫、分層流程、情境、主持文案和卡面／卡背美術（`EDITIONS`，`src/data/catalog.ts`）：
+
+- **深夜限定 After Dark（18+）**：成年伴侶兩人玩，牌局就是一次做愛的流程：I 調情 → II 前夕 → III 激情 → IV 收尾，最後一張是「餘溫」。四種牌：情話問答（說）、撩撥任務（做：按摩、觸碰、道具、讓對方先到一次⋯⋯）、祕密幻想（坦白與界線）、姿勢圖解（只在激情層，拱窗裡畫星座風格的抽象人形圖說明怎麼做），共 167 張；前夕與激情層的撩撥任務抽兩倍。開場先約好「綠燈／黃燈／紅燈」，第一次進入要確認年滿 18 歲。節奏分 10／16／24 張，四個階段都會走完。
+- **爸媽聊聊 Mom & Dad**：孩子和爸媽（也可以有阿公阿嬤）2–8 人一起玩：✧ 暖暖身 → I 家常話 → II 老故事 → III 心裡話。主題有從前從前、我們這一家、想對你說，野卡是「一起做件事」，共 123 張。很多題是「爸媽說：⋯／孩子說：⋯」的雙面題，輪到的人照自己的身分答那一半，卡面上會分成兩段。
+
+特別版的題庫在 `src/data/editions/`，牌種代號以 `ad-`、`pa-` 開頭；姿勢圖解的人形座標在 `poses.ts`，由 `src/components/PoseArt.tsx` 畫出（選單縮圖用 `art-source/editions/tools/poses.py` 畫，兩邊畫法要一致）；主持文案（開場白、玩法、小抄、收尾卡）在 `src/data/guide.ts` 的 `GUIDES`。
 
 ## 開發
 
@@ -37,10 +47,12 @@ npm run typecheck
 ```
 src/app/            畫面（Expo Router）：index 首頁、setup 準備牌局、play 牌桌、favorites 收藏
 src/components/     卡牌、扇形手牌（FanHand）、洗牌動畫（ShuffleLayer）、按鈕、面板
-src/data/           catalog（對象／情境／主題／分層）、questions（題庫）、guide（開場白、接話小抄、收尾分享）
-src/lib/            deck（分層組牌、玩家名單）、storage（收藏與設定）、feedback（音效與震動）
-assets/cards/       卡背與 8 種卡面美術
+src/data/           catalog（版本／對象／情境／主題／分層）、questions（題庫）、guide（開場白、接話小抄、收尾分享）
+src/data/editions/  特別版題庫：afterdark 深夜限定、parents 爸媽聊聊
+src/lib/            deck（分層組牌、玩家名單）、storage（收藏與設定）、feedback（音效與震動）、music（背景音樂）
+assets/cards/       卡背與 8 種卡面美術；afterdark/、parents/ 是特別版的卡背與卡面
 assets/scenes/      情境插畫
+assets/music/       背景音樂（可無縫循環的 mp3，由 art-source/music/ 的程式合成）
 assets/fonts/       已子集化的思源宋體與 Cormorant Garamond
 art-source/         美術原始大圖與完整字型（不會打包進 App）
 ```
@@ -65,5 +77,9 @@ npm run fonts
 ## 美術
 
 卡牌美術以使用者提供的參考圖風格（新藝術運動、慕夏風、薰衣草紫與土耳其藍、金色秋葉）透過 AI 生成；音效同樣為 AI 生成。原始檔放在 `art-source/`。
+
+特別版美術在 `art-source/editions/`：深夜限定的卡背、情話問答、撩撥任務是 AI 生成；祕密幻想和爸媽聊聊目前是用 `tools/compose.py` 把現有插畫嵌進卡框合成的暫代圖。提示詞在 `prompts.md`，重新生成後執行 `python3 art-source/editions/tools/compose.py` 就會輸出到 `assets/cards/<版本>/` 與 `assets/topics/<版本>/`。
+
+背景音樂是 `art-source/music/` 裡的 Python 程式用 numpy 從零合成的（電鋼琴、撥弦、鐘琴、鼓組都是演算法做出來的，沒有用任何取樣），所以沒有版權問題。曲目與情境的對應在 `tracks.py` 開頭的表格；改了編曲後在專案根目錄執行 `python3 art-source/music/tracks.py`（或加上曲名只重做幾首），會輸出到 `assets/music/`。每首曲子的殘響與尾音會折回開頭，檔案頭尾接得起來、可以無縫循環。播放端（淡入淡出、換曲、靜音、App 進背景時暫停）在 `src/lib/music.ts`，各曲音量微調是那裡的 `GAIN`。
 
 App 圖示是「拱窗對話框」：卡背的拱窗加上對話框尾巴，窗裡升起金色太陽。向量原始檔在 `art-source/logo/`（iOS 圖示、Android 自適應圖示的前景／背景／單色版、啟動圖示、favicon），輸出的 PNG 在 `assets/`；其他四款提案留在 `art-source/logo-concepts/`。

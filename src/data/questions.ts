@@ -1,4 +1,7 @@
-import type { CardKind, PartnerId, StageId } from './catalog';
+import type { CardKind, PartnerId, StageId, TopicId } from './catalog';
+import { AFTERDARK } from './editions/afterdark';
+import { PARENTS } from './editions/parents';
+import { POSES, type Pose } from './editions/poses';
 import type { Crowd } from './guide';
 import { COLLEAGUE } from './partners/colleague';
 import { CRUSH } from './partners/crush';
@@ -27,6 +30,8 @@ export type Question = {
   aud?: Audience;
   /** 專屬某一種談話對象的題目；沒有就是通用題 */
   partner?: PartnerId;
+  /** 深夜限定的姿勢圖解牌：拱窗裡要畫的人形圖 */
+  pose?: Pose;
 };
 
 /**
@@ -40,7 +45,8 @@ export type Row = [number, StageId, string, Audience?];
 
 export type Bank = Partial<Record<CardKind, Row[]>>;
 
-const BANK: Record<CardKind, Row[]> = {
+/** 經典版的通用題 */
+const BANK: Record<TopicId | 'wild', Row[]> = {
   icebreak: [
     // 暖身
     [1, 0, '如果今天突然多出一天假，你會怎麼過？'],
@@ -597,7 +603,15 @@ function expand(bank: Bank, partner?: PartnerId): Question[] {
 export const QUESTIONS: Question[] = [
   ...expand(BANK),
   ...(Object.keys(BY_PARTNER) as PartnerId[]).flatMap((p) => expand(BY_PARTNER[p]!, p)),
+  // 特別版的牌種（ad-、pa-）只屬於自己的版本，id 不會和經典版撞號
+  ...expand(AFTERDARK).map(withPose),
+  ...expand(PARENTS),
 ];
+
+/** 姿勢圖解牌 ad-pose-N 對應 POSES 的第 N 個 */
+function withPose(q: Question): Question {
+  return q.kind === 'ad-pose' ? { ...q, pose: POSES[Number(q.id.slice('ad-pose-'.length)) - 1] } : q;
+}
 
 export const QUESTION_BY_ID: Record<string, Question> = Object.fromEntries(QUESTIONS.map((q) => [q.id, q]));
 
